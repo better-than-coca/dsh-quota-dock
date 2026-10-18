@@ -1,6 +1,6 @@
 # dsh-quota-dock · 冻结接口契约
 
-插件目录 `E:\dsh\dsh-quota-dock`，包名 `@local/dsh-quota-dock`。
+插件目录 `E:\dsh\dsh-quota-dock`，包名 `dsh-quota-dock`。
 本文件是 host 半与 client 半之间**唯一**的接口来源；两边都不许改它，要改先找 Lead。
 
 ## 文件归属（写作用域不重叠）
@@ -85,7 +85,7 @@
 
 ## 5. Client 半（client.js）
 
-- 形态照抄 `E:\dsh\dsh-session-cost\client.js`：`window.__ModuleLoader__.load({ id: '@local/dsh-quota-dock', factory(require) {...} })`，`require('react')` / `require('react-dom')`，无构建。
+- 形态照抄 `E:\dsh\dsh-session-cost\client.js`：`window.__ModuleLoader__.load({ id: 'dsh-quota-dock', factory(require) {...} })`，`require('react')` / `require('react-dom')`，无构建。
 - `apply(ctx)`：`inject: ['slots','locale']`；`ctx.effect(() => ctx.locale.register(NS, {en:{...},zh:{...}}), '...')`；然后
 
 ```js
@@ -121,3 +121,70 @@ ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
 - `C:\Users\camellia\.dsh\profiles\desktop\node_modules\dsh-token-quota\lib\index.js` —— `ctx.webServer.register` + `writeJson`（第 470、1057 行附近）
 - `C:\Users\camellia\.dsh\profiles\desktop\node_modules\dsh-token-quota\lib\providers.js` —— CC / DeepSeek 两家适配层的字段名
 - `E:\dsh\dsh-quota-plugin-brief.md` —— 需求原文（含实测字段语义）
+
+## 7. v2（2026-10-18）—— 点击面板 + 平台接入
+
+§5 的「12/50」示例作废：常显行只留百分比与进度条，DeepSeek 组不写 “DS” 前缀。行可点击，展开面板。
+
+### 7.1 快照补充字段（全部 additive，client 必须容忍缺失）
+
+```
+cc: {
+  ok, error, windows: [{ id, used, cap, resetAt, error }],
+  remainingMonthlyCredits,   // = credits.monthlyCredits（剩余）
+  usedMonthlyCredits,        // = usage.totalMonthlyCredits（已用）
+  monthlyCap,                // 派生 = usedMonthlyCredits + remainingMonthlyCredits
+  subscription: { status, planId, currentPeriodStart, currentPeriodEnd },
+  credits: { monthlyCredits, purchasedCredits, freeCredits, belowThreshold, creditThreshold }
+}
+deepseek: {
+  ok, error, isAvailable,
+  balances: [{ currency, totalBalance, grantedBalance, toppedUpBalance }]
+}
+platforms: [                 // 非内置平台（§7.3）的余额，失败也保留上一份好值 + ok:false
+  { id, name, kind, ok, error, fetchedAt, fields: [{ label, value }] }
+]
+```
+
+- 顶层另有 `refreshMs`（2026-10-18 新增）：当前生效的刷新间隔，面板页脚据此写「每 N 自动重取一次」。缺失时 client 不猜，改显示设置入口。
+
+### 7.2 面板（client 半）
+
+- 整行是 `<button>`（`aria-expanded`），点击在行**上方**弹出面板；Esc、右上角 × 与再次点击都能关。
+- 面板**只放钱**，不放任何配置（配置见 §7.4）：
+  - 顶部：`额度与余额` + `更新于 MM-DD HH:mm` + 刷新 + ×；下面一行 hero——本月剩余（大号）+ 本月已用 + 还能用 N 天。
+  - **Command Code 独占整行**：三个窗口各一行（label / `已用/额度` / 5px 条 / 百分比 / 右侧时间）；5h 与周用倒计时，月直接给周期结束日期（一个月外的倒计时没有信息量）；月行下面接**一行**明细（已用 · 剩余 · 订阅），「月」全卡只出现一次，周期结束也不重复。
+  - **DeepSeek**：单币种时币种写在卡片右上角；下面是 总额 / 赠送 / 充值 / 可用（圆点 + 文字，颜色不单独承载状态）+ 峰谷一行说明。
+  - **其他平台**：已接入平台各一行；一家都没有时给一句说明，不堆空行。
+  - 页脚：左「每 N 自动重取一次」（N 取快照的 `refreshMs`），右「平台接入在 设置 → 额度与平台」。
+- 面板 `min(820px, 90vw)`、最高 78vh、圆角 14px；卡片两列网格，Command Code 跨两列。
+- 只用 `--dsw-alias-*` token；语义色只有绿/黄/红三档（`#7BB295` / `#E0A03A` / `#E0574F` 作回退字面量）。
+- 面板本身可以拥挤；**常显行**仍然是「一眼能读」的那一行。
+- 不用 gift/emoji。
+
+### 7.3 平台接入（host 半）
+
+- 存储：`<DSH_HOME>/dsh-quota-dock/platforms.json`（目录不存在则创建；文件权限尽量 0600）。文档形态 `{ version:1, refreshMs, platforms:[...] }`；旧版纯数组文件仍能读，读入后按默认间隔补齐。key **只进不出**：GET 只回 `hasKey: true`。
+- `GET /api/dsh-quota-dock/platforms` → `{ ok:true, refreshMs, refreshChoices, storePath, platforms:[{id,name,kind,baseUrl,hasKey,ok,error,fetchedAt,fields:[{label,value}]}] }`（永不回显 key）。`refreshChoices` = `[30000,60000,120000,300000,600000]`。
+- `POST /api/dsh-quota-dock/platforms`，body JSON：
+  - `{ action:'add', name, kind:'openrouter'|'custom', baseUrl?, apiKey }`
+  - `{ action:'remove', id }`
+  - `{ action:'settings', refreshMs }` —— 必须是 `refreshChoices` 里的值，否则 400
+  → 返回与 GET 相同的负载；非法输入 400 + `{ ok:false, error }`。
+- 刷新节奏：`refreshMs` 只喂给懒触发判定（行、面板、平台列表三处 TTL 判断），clamp 到 15s–1h，默认 60s。**没有后台定时器**：没有人看的时候一次请求都不发。
+- 适配器：
+  - `deepseek`（内置）：`GET https://api.deepseek.com/user/balance`
+  - `openrouter`（内置）：`GET https://openrouter.ai/api/v1/credits` → `data.total_credits` / `data.total_usage`，余额 = 两者之差
+  - `custom`：`GET <baseUrl>`，`authorization: Bearer <key>`，把响应里前两层的数字字段铺成 `fields`
+- 超时 15s，单个平台失败不影响其它平台；`POST /refresh` 同时刷新平台。
+
+### 7.4 设置页（client 半）
+
+设置二级菜单分四段，顺序固定为 `builtin` → `platforms` → `add` → `data`：
+
+- **内置平台**：Command Code（`COMMANDCODE_API_KEY`，读当月已用占比）与 DeepSeek（`DEEPSEEK_API_KEY`，读第一个钱包总额），每行 状态点 + 名称 + 环境变量名 + 一个关键数字 + 更新时间 + 单行刷新。数字只作「配没配好」的提示，金额看常显行与面板。
+- **已接入平台**：一行 = 状态点 + 名称 + `kind · baseUrl` + 状态词 + 金额 + 删除。空态是一行虚线框（「还没有接入任何平台 / 下面添加一个即可」+ 跳到表单）。
+- **接入新平台**：预设 chips 六个（OpenRouter / LiteLLM / New API / 硅基流动 / Kimi / 自定义），选中即填名称与地址；OpenRouter 地址由插件固定、只读展示并说明原因，其余预设地址可改。字段一律标签在上、输入在下，不拿 placeholder 当标签。提交按钮靠右。
+- **数据与刷新**：刷新间隔 select（`refreshChoices` 五档，显示成「30 秒 / 1 分钟 / …」）+ 立即刷新、最近刷新、配置文件路径。改间隔走 `POST { action:'settings' }`，落后端 `platforms.json`。
+- 设置页不显示金额汇总（金额属于行与面板）；颜色只用 `--dsw-alias-*`，语义色只有 ok/warn/bad 三个档。
+

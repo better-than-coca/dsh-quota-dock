@@ -1,20 +1,31 @@
 /**
- * Client half of the quota dock: one always-visible, centred line of usage on the
- * input dock — the full-width row directly above the composer card — so the
+ * Client half of the quota dock: one always-visible, centred line of usage on
+ * the input dock — the full-width row directly above the composer card — so the
  * Command Code 5h / weekly / monthly windows, each with a thin fill bar and its
- * percentage, plus the DeepSeek balance are readable at a glance with no click.
+ * percentage, plus the DeepSeek rate clock are readable at a glance with no
+ * click.
  *
  * Bars never replace the reading, in this shape:
- *   5h ▮▮▯▯▯ 6%  周 ▮▮▯▯▯ 14%  月 ▮▮▯▯▯ 12%  │  DS 峰 67% ▮▮▮▯ 谷 33%
+ *   5h ▮▮▯▯▯ 6%  周 ▮▮▯▯▯ 14%  月 ▮▮▯▯▯ 12%  │  ▮▮▮▯ 峰时 · 距谷 3h42m
  * A missing reading becomes an em dash instead of `undefined` or `NaN`.
- * The DeepSeek group is the clock rather than the wallet: a bar of the current
- * peak / off-peak split of the day (DeepSeek prices 谷 at 00:30–08:30 and all weekend).
+ *
+ * Clicking that row slides a full-width money sheet down from the top edge of
+ * the frame (`shell.overlay`): the three windows with their used/cap figures,
+ * bars, percentages and reset countdowns, the monthly credit detail, every
+ * DeepSeek wallet, and every other platform's balance. The sheet is money only —
+ * it carries no form and no field for a credential.
+ *
+ * Platform configuration — list, add, remove — lives on its own settings page
+ * (`settings.section`), beside the other entries in the settings sidebar.
+ *
+ * Row, sheet and settings page read one module-level store; only the row runs
+ * the refresh loop.
  *
  * The data comes from this bundle's Host half over the same origin; the contract
  * (E:\dsh\dsh-quota-dock\CONTRACT.md) is the only interface between the halves.
  */
 window.__ModuleLoader__.load({
-  id: '@local/dsh-quota-dock',
+  id: 'dsh-quota-dock',
   factory(require) {
     const React = require('react')
     const h = React.createElement
@@ -22,11 +33,10 @@ window.__ModuleLoader__.load({
 
     const SNAPSHOT_URL = '/api/dsh-quota-dock/snapshot'
     const REFRESH_URL = '/api/dsh-quota-dock/refresh'
+    const PLATFORMS_URL = '/api/dsh-quota-dock/platforms'
     /** Cadence while the first upstream read is still running, and its budget. */
     const POLL_MS = 2000
     const POLL_BUDGET_MS = 30000
-    /** Cadence once numbers are on screen; focus also refreshes. */
-    const REFRESH_MS = 5 * 60 * 1000
     /** The countdown to the next rate switch re-renders this often. */
     const TICK_MS = 30 * 1000
     /** Command Code's three windows, fixed order, all three on the row. */
@@ -57,7 +67,73 @@ window.__ModuleLoader__.load({
         loading: 'Checking…',
         unavailable: 'unavailable',
         noKey: 'key not configured',
-        stale: 'possibly stale',
+        stale: 'data is old',
+        close: 'close',
+        sheetTitle: 'Usage & balance',
+        updated: 'updated',
+        overviewRemaining: 'remaining',
+        overviewUsed: 'used',
+        overviewDaysLeft: 'days left',
+        unitDays: '',
+        monthRemaining: 'month left',
+        monthUsed: 'month used',
+        monthTotal: 'month total',
+        periodEnd: 'period ends',
+        resetsIn: 'to reset',
+        plan: 'plan',
+        purchased: 'purchased',
+        free: 'free',
+        threshold: 'alert below',
+        balance: 'balance',
+        total: 'total',
+        granted: 'granted',
+        toppedUp: 'topped up',
+        available: 'available',
+        unitCredits: 'credits',
+        otherPlatforms: 'other platforms',
+        schedule: 'off-peak 00:30-08:30, all weekend',
+        fetchingNow: 'fetching…',
+        settingsTitle: 'Quota & platforms',
+        settingsHint: 'Configuration only — the amounts live on the row above the composer.',
+        sectionPlatforms: 'Connected platforms',
+        sectionAdd: 'Add a platform',
+        sectionAbout: 'Notes',
+        aboutText: 'The key stays in the local platforms.json; the endpoint only reports whether one is set. Each provider times out after 15s and one failure never affects the others.',
+        kindCustom: 'Custom',
+        stateOk: 'ok',
+        stateBad: 'failed',
+        platformsInSettings: 'platform access lives in Settings → Quota & platforms',
+        resetLocal: 'reset times are local',
+        otherNote: 'nothing yet — each connected platform gets one row here, with its balance and the time it was last read.',
+        autoRefreshLead: 'every ',
+        autoRefreshTail: ' auto refresh',
+        refresh: 'refresh',
+        addPlatform: 'add platform',
+        platformName: 'name',
+        kind: 'kind',
+        baseUrl: 'endpoint',
+        apiKey: 'API key',
+        add: 'add',
+        remove: 'remove',
+        keySet: 'key set',
+        keyMissing: 'key missing',
+        none: 'none',
+        emptyList: 'no platforms yet',
+        emptyHint: 'add one below',
+        unitSeconds: 's',
+        unitMinutes: 'min',
+        sectionBuiltin: 'Built-in providers',
+        builtinNote: 'keys come from the environment',
+        sectionData: 'Data & refresh',
+        intervalLabel: 'refresh every',
+        lastRefresh: 'last refresh',
+        storeFile: 'store file',
+        refreshNowLabel: 'refresh now',
+        presetCustom: 'Custom',
+        presetHint: 'a preset fills the address for you',
+        addExisting: 'add one',
+        fixedAddress: 'this provider address is fixed by the plugin',
+        addressHint: 'Any JSON endpoint works: the Host flattens up to 50 numeric fields into rows.',
       },
       zh: {
         fiveHour: '5h',
@@ -75,8 +151,113 @@ window.__ModuleLoader__.load({
         loading: '查询中…',
         unavailable: '取数失败',
         noKey: '未配置 key',
-        stale: '数据可能过期',
+        stale: '数据较旧',
+        close: '关闭',
+        sheetTitle: '额度与余额',
+        updated: '更新于',
+        overviewRemaining: '本月剩余',
+        overviewUsed: '本月已用',
+        overviewDaysLeft: '还能用',
+        unitDays: '天',
+        monthRemaining: '月度剩余',
+        monthUsed: '月度已用',
+        monthTotal: '月度总额',
+        periodEnd: '周期结束',
+        resetsIn: '后重置',
+        plan: '订阅',
+        purchased: '购买额度',
+        free: '赠送额度',
+        threshold: '告警线',
+        balance: '余额',
+        total: '总额',
+        granted: '赠送',
+        toppedUp: '充值',
+        available: '可用',
+        unitCredits: 'credits',
+        otherPlatforms: '其他平台',
+        schedule: '谷 00:30–08:30（周末全天谷价）',
+        fetchingNow: '拉取中…',
+        settingsTitle: '额度与平台',
+        settingsHint: '这里只管配置，金额看输入框上方那一行。',
+        sectionPlatforms: '已接入平台',
+        sectionAdd: '接入新平台',
+        sectionAbout: '说明',
+        aboutText: 'API key 只存在本机 platforms.json，接口只回传是否配置；单家超时 15 秒，失败不影响其他家。',
+        kindCustom: '自定义',
+        stateOk: '正常',
+        stateBad: '失败',
+        platformsInSettings: '平台接入在 设置 → 额度与平台',
+        resetLocal: '重置时间按本地时区',
+        otherNote: '暂无。已接入的平台会在这里各占一行，显示余额和最近一次读取的时间。',
+        autoRefreshLead: '每 ',
+        autoRefreshTail: '自动重取一次',
+        refresh: '刷新',
+        addPlatform: '接入平台',
+        platformName: '名称',
+        kind: '类型',
+        baseUrl: '接口地址',
+        apiKey: 'API key',
+        add: '添加',
+        remove: '删除',
+        keySet: '已配置 key',
+        keyMissing: '未配置 key',
+        none: '暂无',
+        emptyList: '还没有接入任何平台',
+        emptyHint: '下面添加一个即可',
+        unitSeconds: '秒',
+        unitMinutes: '分钟',
+        sectionBuiltin: '内置平台',
+        builtinNote: 'key 从环境变量读',
+        sectionData: '数据与刷新',
+        intervalLabel: '刷新间隔',
+        lastRefresh: '最近刷新',
+        storeFile: '配置文件',
+        refreshNowLabel: '立即刷新',
+        presetCustom: '自定义',
+        presetHint: '选预设可省掉填地址',
+        addExisting: '去添加',
+        fixedAddress: '这一家的地址由插件固定',
+        addressHint: '任何返回 JSON 的余额接口都能接：Host 会把最多 50 个数字字段平铺成行。',
       },
+    }
+
+    /* ---- shared store ------------------------------------------------------
+     * The row, the sheet and the settings page are three separate components on
+     * three separate slots, so they cannot share React state. They share this
+     * module-level store instead; only the row owns the polling loop and the
+     * settings page owns the platform list, so nothing polls twice.
+     */
+    const store = {
+      snapshot: null,
+      /** 'loading' | 'ready' | 'failed' — what the last row load settled on. */
+      phase: 'loading',
+      /** The clock; the ticker republishes it so every surface agrees on now. */
+      now: Date.now(),
+      /** Whether the money sheet is slid in. */
+      panelOpen: false,
+      listeners: new Set(),
+    }
+
+    /** Merge a patch into the store and wake every subscriber. */
+    function publish(patch) {
+      Object.assign(store, patch)
+      store.listeners.forEach(listener => {
+        try {
+          listener()
+        } catch (error) {
+          // One broken subscriber must not stop the others from repainting.
+        }
+      })
+    }
+
+    /** Subscribe the calling component to the store. */
+    function useStore() {
+      const [, bump] = React.useReducer(value => value + 1, 0)
+      React.useEffect(() => {
+        store.listeners.add(bump)
+        return () => { store.listeners.delete(bump) }
+      }, [])
+      return store
     }
 
     const sleep = ms => new Promise(resolve => { setTimeout(resolve, ms) })
@@ -104,6 +285,20 @@ window.__ModuleLoader__.load({
       return Number.isFinite(number) ? number : null
     }
 
+    /**
+     * A usable instant in ms, or null. The contract hands out ISO strings, but
+     * numbers are accepted too, so a host that switches to epoch ms keeps working.
+     */
+    function toMs(value) {
+      const number = toNum(value)
+      if (number !== null) return number
+      if (typeof value === 'string') {
+        const parsed = Date.parse(value)
+        return Number.isFinite(parsed) ? parsed : null
+      }
+      return null
+    }
+
     const round2 = value => Math.round(value * 100) / 100
 
     /** Credit count as text; anything unusable reads as an em dash. */
@@ -111,6 +306,22 @@ window.__ModuleLoader__.load({
       const number = toNum(value)
       if (number === null) return '—'
       return Number.isInteger(number) ? String(number) : String(round2(number))
+    }
+
+    /** Currency mark: a known code becomes its symbol, an unknown one a suffix. */
+    const CURRENCY_MARKS = { CNY: '¥', USD: '$', EUR: '€', GBP: '£', JPY: '¥', KRW: '₩', HKD: 'HK$', TWD: 'NT$' }
+
+    /**
+     * A money amount with its unit: `36.16` + `CNY` reads `¥36.16`, an unknown
+     * code reads `36.16 XYZ`, and no code at all leaves the bare number.
+     */
+    function moneyText(value, code) {
+      const text = numText(value)
+      if (text === '—') return text
+      const key = typeof code === 'string' ? code.trim().toUpperCase() : ''
+      if (key === '') return text
+      const mark = CURRENCY_MARKS[key]
+      return mark === undefined ? `${text} ${key}` : `${mark}${text}`
     }
 
     /** `used/cap`; a missing side is an em dash, so the shape never collapses. */
@@ -249,7 +460,7 @@ window.__ModuleLoader__.load({
         const window = windowOf(snapshot.cc, id)
         return `${tr(id)} ${percentText(window?.used, window?.cap)}`
       })
-      return `${parts.join(' ')} ${tr('deepseek')} ${cycleText(tr, now)}`
+      return `${parts.join(' ')} ${cycleText(tr, now)}`
     }
 
     /**
@@ -315,7 +526,7 @@ window.__ModuleLoader__.load({
         // Leading space in place of the flex gap, for the reason above; the
         // cycle track carries no text, so spaces are written out explicitly.
         h('span', { className: 'dsh-quota-dock-ds-num' },
-          ` ${t('deepseek')} `,
+          ' ',
           h('span', {
             className: 'dsh-quota-dock-track',
             'data-quota-cycle': cycle.segment,
@@ -331,61 +542,826 @@ window.__ModuleLoader__.load({
       return children
     }
 
+    /** Local `MM-DD HH:mm`, or null when the value is unusable. */
+    function fmtClock(value) {
+      const ms = toMs(value)
+      if (ms === null) return null
+      const date = new Date(ms)
+      if (Number.isNaN(date.getTime())) return null
+      const pad = part => String(part).padStart(2, '0')
+      return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+    }
+
+    /** `3h12m` until the instant; null when it is absent or already past. */
+    function fmtCountdown(value, now) {
+      const ms = toMs(value)
+      if (ms === null) return null
+      const rest = ms - now.getTime()
+      if (!Number.isFinite(rest) || rest <= 0) return null
+      const minutes = Math.round(rest / 60000)
+      const hours = Math.floor(minutes / 60)
+      return hours > 0 ? `${hours}h${minutes % 60}m` : `${minutes}m`
+    }
+
+    /** `3h12m 后重置`, or — when the window has no usable reset instant. */
+    function resetText(window, t, now) {
+      const countdown = window === null ? null : fmtCountdown(window.resetAt, now)
+      return countdown === null ? '—' : `${countdown} ${t('resetsIn')}`
+    }
+
+    /** `更新于 10-18 02:52`, or an empty string when the Host never succeeded. */
+    function ageText(snapshot, t) {
+      if (snapshot === null || snapshot === undefined) return ''
+      const clock = fmtClock(snapshot.fetchedAt)
+      if (clock === null) return ''
+      // The age is only called out once it is genuinely old: a low-key suffix
+      // rather than a permanent "possibly stale" nag.
+      const fetchedAt = toMs(snapshot?.fetchedAt)
+      const old = fetchedAt !== null && Date.now() - fetchedAt > 24 * 60 * 60 * 1000
+      return old ? `${t('updated')} ${clock} · ${t('stale')}` : `${t('updated')} ${clock}`
+    }
+
+    /**
+     * What a non-Command-Code platform is worth, as one finished string: an
+     * explicit `balance` field first, then a `fields` entry named like a balance,
+     * then the error, and only then the raw fields. Never the API key.
+     */
+    function platformMoney(entry, t) {
+      if (entry === null || entry === undefined) return t('none')
+      if (toNum(entry.balance) !== null) return numText(entry.balance)
+      const fields = Array.isArray(entry.fields) ? entry.fields : []
+      const named = fields.find(field => field !== null && field !== undefined
+        && /balance|余额/i.test(String(field.label ?? '')))
+      if (named !== undefined && named !== null) return String(named.value ?? '—')
+      if (entry.ok === false) return entry.error ?? t('unavailable')
+      if (fields.length > 0) {
+        return fields.map(field => `${field?.label ?? '—'} ${field?.value ?? '—'}`).join(' · ')
+      }
+      return t('none')
+    }
+
+    /**
+     * The money sheet's three cards as plain data, so the offline smoke test can
+     * assert them without a browser. Every value is a finished string.
+     */
+    /**
+     * Rough runway left at the current burn rate: `remaining / (used / elapsed)`
+     * days. Null — rendered as `—` — whenever the estimate would be a guess:
+     * nothing used yet, no usable period start, or a non-finite division.
+     */
+    function daysLeft(cc, now) {
+      const remaining = toNum(cc?.remainingMonthlyCredits)
+      const used = toNum(cc?.usedMonthlyCredits)
+      if (remaining === null || used === null || used <= 0) return null
+      const start = toMs(cc?.subscription?.currentPeriodStart)
+      const from = start === null ? now.getTime() - 30 * 86400000 : start
+      const elapsedDays = (now.getTime() - from) / 86400000
+      if (!Number.isFinite(elapsedDays) || elapsedDays <= 0) return null
+      const perDay = used / elapsedDays
+      if (!Number.isFinite(perDay) || perDay <= 0) return null
+      const days = remaining / perDay
+      return Number.isFinite(days) && days >= 0 ? days : null
+    }
+
+    /** `12.3` / `<0.1` / `0` / `—` — one decimal, and never Infinity or NaN. */
+    function daysText(value) {
+      if (value === null || value === undefined || !Number.isFinite(value)) return '—'
+      if (value <= 0) return '0'
+      if (value < 0.1) return '<0.1'
+      return String(Math.round(value * 10) / 10)
+    }
+
+    function sheetCards(snapshot, t, now) {
+      const snap = snapshot ?? {}
+      const cc = snap.cc ?? {}
+      const deepseek = snap.deepseek ?? {}
+      const subscription = cc.subscription ?? {}
+      const creditUnit = t('unitCredits')
+      /** Amounts are Command Code credits, so every one of them carries the unit. */
+      const withCredits = text => (text === '—' || text === '' ? text : `$${text}`)
+      const windows = SHOWN_WINDOW_IDS.map(id => {
+        const window = windowOf(cc, id)
+        return {
+          key: id,
+          label: t(id),
+          value: withCredits(ratioText(window?.used, window?.cap)),
+          // A month-away countdown is noise; that row carries the date instead.
+          reset: id === 'monthly'
+            ? (fmtClock(window?.resetAt) ?? resetText(window, t, now))
+            : resetText(window, t, now),
+          window,
+        }
+      })
+      const plan = [subscription.planId, subscription.status]
+        .filter(part => part !== null && part !== undefined && part !== '')
+        .join(' · ') || '—'
+      /**
+       * The month's own figures, flattened onto a single line under the month row.
+       * They used to sit in a second block that repeated the word 月; the row above
+       * already names it, and its right-hand column already carries the period end,
+       * so neither is repeated here.
+       */
+      const detail = [
+        { label: t('monthUsed'), value: withCredits(numText(cc.usedMonthlyCredits)) },
+        { label: t('monthRemaining'), value: withCredits(numText(cc.remainingMonthlyCredits)) },
+        { label: t('plan'), value: plan },
+      ]
+      const wallets = (Array.isArray(deepseek.balances) ? deepseek.balances : []).map((wallet, index) => ({
+        key: `wallet-${index}`,
+        currency: wallet?.currency ?? `#${index + 1}`,
+        money: [
+          { label: t('total'), value: moneyText(wallet?.totalBalance, wallet?.currency) },
+          { label: t('granted'), value: moneyText(wallet?.grantedBalance, wallet?.currency) },
+          { label: t('toppedUp'), value: moneyText(wallet?.toppedUpBalance, wallet?.currency) },
+        ],
+      }))
+      const extras = []
+      if (deepseek.isAvailable !== undefined && deepseek.isAvailable !== null) {
+        // The state word always rides with the mark: colour alone never carries it.
+        extras.push({
+          label: t('available'),
+          state: deepseek.isAvailable === true ? 'ok' : 'bad',
+          value: deepseek.isAvailable === true ? t('stateOk') : t('stateBad'),
+        })
+      }
+      const platforms = (Array.isArray(snap.platforms) ? snap.platforms : []).map((entry, index) => {
+        const value = platformMoney(entry, t)
+        // OpenRouter bills in USD; a custom endpoint has no known unit.
+        const code = entry?.kind === 'openrouter' ? 'USD' : ''
+        return {
+          key: entry?.id ?? `platform-${index}`,
+          label: entry?.name ?? entry?.id ?? `#${index + 1}`,
+          kind: entry?.kind ?? '',
+          value: code !== '' && toNum(value) !== null ? moneyText(value, code) : value,
+        }
+      })
+      const overview = {
+        remaining: withCredits(numText(cc.remainingMonthlyCredits)),
+        used: withCredits(numText(cc.usedMonthlyCredits)),
+        days: daysText(daysLeft(cc, now)),
+      }
+      return { overview, windows, detail, wallets, extras, platforms }
+    }
+
+    /**
+     * The money sheet itself: a centred floating panel, money only — there is
+     * deliberately no form, no add button and no credential field anywhere in
+     * this tree.
+     *
+     * There is no page-wide backdrop: the wrapper spans only the panel, so the
+     * rest of the frame keeps its hover and its clicks; the close button,
+     * Escape and the always-on row all close the sheet.
+     */
+    function sheetTree(state) {
+      const { t, now, snapshot, busy, onClose, onRefresh } = state
+      const cards = sheetCards(snapshot, t, now)
+      const card = (key, title, options, children) => h('section', {
+        className: options.wide === true
+          ? 'dsh-quota-dock-card dsh-quota-dock-card-wide'
+          : 'dsh-quota-dock-card',
+        'data-quota-card': key,
+        key,
+      },
+      h('div', { className: 'dsh-quota-dock-card-head', key: 'head' },
+        h('span', { className: 'dsh-quota-dock-card-title', key: 'title' }, title),
+        options.note === undefined || options.note === null || options.note === ''
+          ? null
+          : h('span', { className: 'dsh-quota-dock-card-note', key: 'note' }, options.note)),
+      ...children)
+      /** Key/value rows on a shared baseline: the label left, the number right. */
+      const kv = (rows, key) => h('div', { className: 'dsh-quota-dock-kv', key },
+        ...rows.flatMap((row, index) => [
+          h('span', { className: 'dsh-quota-dock-kv-label', key: `${index}-label` }, row.label),
+          row.state === undefined
+            ? h('span', { className: 'dsh-quota-dock-kv-value', key: `${index}-value` },
+                row.value === null || row.value === undefined || row.value === ''
+                  ? '—'
+                  : String(row.value))
+            // The dot is decoration; the word beside it is the state itself.
+            : h('span', {
+                className: 'dsh-quota-dock-status',
+                'data-state': row.state,
+                key: `${index}-value`,
+              },
+                h('i', { key: 'dot' }),
+                row.value),
+        ]))
+      // The hero: the month's remaining credits first and biggest, the two
+      // supporting figures beside it. One plate, one message, no chrome.
+      const unitDays = t('unitDays')
+      const stat = (key, label, value) => h('div', { className: 'dsh-quota-dock-hero-stat', key },
+        h('div', { className: 'dsh-quota-dock-hero-stat-label', key: 'label' }, label),
+        h('div', { className: 'dsh-quota-dock-hero-stat-value', key: 'value' }, value))
+      const hero = h('div', {
+        className: 'dsh-quota-dock-hero',
+        'data-quota-card': 'overview',
+        key: 'overview',
+      },
+      h('div', { className: 'dsh-quota-dock-hero-main', key: 'main' },
+        h('div', { className: 'dsh-quota-dock-hero-label', key: 'label' }, t('overviewRemaining')),
+        h('div', { className: 'dsh-quota-dock-hero-value', key: 'value' }, cards.overview.remaining)),
+      h('div', { className: 'dsh-quota-dock-hero-side', key: 'side' },
+        stat('used', t('overviewUsed'), cards.overview.used),
+        stat('days', t('overviewDaysLeft'),
+          `${cards.overview.days}${unitDays === '' ? '' : ` ${unitDays}`}`)))
+      const windowRows = cards.windows.map(window => h('div', {
+        className: 'dsh-quota-dock-qrow',
+        'data-quota-window': window.key,
+        key: window.key,
+      },
+        h('span', { className: 'dsh-quota-dock-qk', key: 'label' }, window.label),
+        h('span', { className: 'dsh-quota-dock-qv', key: 'value' }, window.value),
+        renderBar(window.window, window.label, t),
+        renderPercent(window.window),
+        h('span', { className: 'dsh-quota-dock-qr', key: 'reset' }, window.reset)))
+      // One line under the month row: used · left · period end · plan. The word
+      // 月 appears once, on the row above, and never again here.
+      const detailKids = []
+      cards.detail.forEach((row, index) => {
+        if (index > 0) {
+          detailKids.push(h('span', { className: 'dsh-quota-dock-detail-sep', key: `${index}-sep` }, '·'))
+        }
+        detailKids.push(h('span', { key: `${index}-row`, className: 'dsh-quota-dock-detail-cell' },
+          `${row.label} `,
+          h('b', { key: `${index}-value` }, row.value)))
+      })
+      const wallets = cards.wallets.length === 0
+        ? [h('div', { className: 'dsh-quota-dock-empty', key: 'none' }, t('none'))]
+        : cards.wallets.flatMap(wallet => [
+            // One wallet needs no heading of its own: its currency is the card note.
+            cards.wallets.length > 1
+              ? h('div', { className: 'dsh-quota-dock-cur', key: `${wallet.key}-cur` },
+                  String(wallet.currency).toUpperCase())
+              : null,
+            kv(wallet.money, `${wallet.key}-money`),
+          ])
+      const platformRows = cards.platforms.length === 0
+        ? [h('p', {
+            className: 'dsh-quota-dock-note dsh-quota-dock-note-solo',
+            key: 'none',
+          }, t('otherNote'))]
+        : cards.platforms.map(entry => h('div', {
+            className: 'dsh-quota-dock-prow',
+            key: entry.key,
+          },
+            h('span', { className: 'dsh-quota-dock-prow-name', key: 'name' }, entry.label),
+            entry.kind ? h('span', { className: 'dsh-quota-dock-prow-kind', key: 'kind' }, entry.kind) : null,
+            h('span', { className: 'dsh-quota-dock-prow-money', key: 'money' }, entry.value)))
+      const walletNote = cards.wallets.length === 1
+        ? String(cards.wallets[0].currency).toUpperCase()
+        : null
+      const cadence = snapshot === null || snapshot === undefined ? null : snapshot.refreshMs
+      const footLeft = Number.isFinite(cadence)
+        ? `${t('autoRefreshLead')}${intervalLabel(cadence, t)}${t('autoRefreshTail')}`
+        : t('platformsInSettings')
+      return h('div', {
+        className: 'dsh-quota-dock-layer',
+        'data-quota-sheet': '',
+        // The shell.overlay layer is click-through; opt this tree back in.
+        style: { pointerEvents: 'auto' },
+      },
+        h('div', {
+          className: 'dsh-quota-dock-sheet',
+          role: 'dialog',
+          'aria-modal': 'true',
+          'aria-label': t('sheetTitle'),
+        },
+          h('div', { className: 'dsh-quota-dock-sheet-head', key: 'head' },
+            h('span', { className: 'dsh-quota-dock-sheet-title', key: 'title' }, t('sheetTitle')),
+            h('span', { className: 'dsh-quota-dock-sheet-age', key: 'age' }, ageText(snapshot, t)),
+            h('button', {
+              type: 'button',
+              className: 'dsh-quota-dock-ghost',
+              key: 'refresh',
+              disabled: busy === true,
+              onClick: onRefresh,
+            }, t('refresh')),
+            h('button', {
+              type: 'button',
+              className: 'dsh-quota-dock-sheet-close',
+              key: 'close',
+              'aria-label': t('close'),
+              onClick: onClose,
+            }, '×')),
+          hero,
+          h('div', { className: 'dsh-quota-dock-rule', key: 'rule' }),
+          h('div', { className: 'dsh-quota-dock-grid', key: 'grid' },
+            card('cc', 'Command Code', { wide: true, note: t('resetLocal') }, [
+              ...windowRows,
+              h('div', { className: 'dsh-quota-dock-detail', key: 'detail' }, ...detailKids),
+            ]),
+            card('deepseek', 'DeepSeek', { note: walletNote }, [
+              ...wallets,
+              cards.extras.length === 0 ? null : kv(cards.extras, 'extras-kv'),
+              h('p', { className: 'dsh-quota-dock-note', key: 'cycle' }, cycleText(t, now)),
+            ]),
+            card('platforms', t('otherPlatforms'), {}, platformRows)),
+          h('div', { className: 'dsh-quota-dock-sheet-foot', key: 'foot' },
+            h('span', { key: 'cadence' }, footLeft),
+            h('span', { key: 'where' }, t('platformsInSettings')))))
+    }
+
+    /** One configured platform: what it is, its last result, its amount, remove. */
+    function platformRow(entry, index, t, onRemove) {
+      const key = entry?.id ?? `platform-${index}`
+      const ok = entry?.ok === true
+      return h('div', { className: 'dsh-quota-dock-plat', key },
+        h('span', {
+          className: 'dsh-quota-dock-dot',
+          'data-quota-dot': ok ? 'ok' : 'bad',
+          'aria-hidden': true,
+        }),
+        h('div', { className: 'dsh-quota-dock-brow-text', key: 'text' },
+          h('div', { className: 'dsh-quota-dock-brow-name', key: 'name' },
+            String(entry?.name ?? entry?.id ?? '—')),
+          h('div', { className: 'dsh-quota-dock-brow-sub', key: 'sub' },
+            [entry?.kind, entry?.baseUrl]
+              .filter(part => typeof part === 'string' && part !== '')
+              .join(' · '))),
+        h('span', { className: 'dsh-quota-dock-pstate' }, ok ? t('stateOk') : t('stateBad')),
+        h('span', { className: 'dsh-quota-dock-pmoney' }, platformMoney(entry, t)),
+        h('button', {
+          type: 'button',
+          className: 'dsh-quota-dock-remove',
+          key: `${key}-remove`,
+          onClick: () => onRemove(entry?.id),
+        }, t('remove')))
+    }
+
+    /** Cadences the settings page offers; the Host validates the value again. */
+    const REFRESH_CHOICES = [30_000, 60_000, 120_000, 300_000, 600_000]
+
+    /**
+     * Platform presets. A preset only fills a name and an address — the key is
+     * always typed. OpenRouter's address is fixed by the Host; the others point
+     * at JSON endpoints whose numeric fields the Host flattens without needing a
+     * per-vendor adapter, so a self-hosted address stays editable.
+     */
+    const PRESETS = [
+      { id: 'openrouter', name: 'OpenRouter', kind: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1/credits' },
+      { id: 'litellm', name: 'LiteLLM', kind: 'custom', baseUrl: '' },
+      { id: 'newapi', name: 'New API', kind: 'custom', baseUrl: '' },
+      { id: 'siliconflow', name: '硅基流动', kind: 'custom', baseUrl: 'https://api.siliconflow.cn/v1/user/info' },
+      { id: 'kimi', name: 'Kimi', kind: 'custom', baseUrl: 'https://api.moonshot.cn/v1/users/me/balance' },
+      { id: 'custom', name: '', kind: 'custom', baseUrl: '' },
+    ]
+
+    /** `30_000` reads `30 秒`, `600_000` reads `10 分钟`. */
+    function intervalLabel(ms, t) {
+      const seconds = Math.round(ms / 1000)
+      return seconds < 60
+        ? `${seconds} ${t('unitSeconds')}`
+        : `${Math.round(seconds / 60)} ${t('unitMinutes')}`
+    }
+
+    /**
+     * The settings page: one row per provider, a preset picker for a new one, and
+     * the refresh cadence. Money lives on the row and in the sheet; the figures
+     * here are a reminder of what is configured, not the reading.
+     */
+    function settingsTree(state) {
+      const {
+        t, platforms, refreshMs, storePath, form, busy, message, snapshot,
+        onForm, onAdd, onRemove, onRefresh, onInterval,
+      } = state
+      const section = (id, title, aside, children) => h('section', {
+        className: 'dsh-quota-dock-sec',
+        'data-quota-section': id,
+        key: id,
+      },
+      h('div', { className: 'dsh-quota-dock-sec-head', key: 'head' },
+        h('h3', { className: 'dsh-quota-dock-sec-title', key: 'title' }, title),
+        aside === null || aside === undefined || aside === ''
+          ? null
+          : h('span', { className: 'dsh-quota-dock-sec-aside', key: 'aside' }, String(aside))),
+      ...children)
+      // Label above the control, never a placeholder standing in for a label.
+      const field = (key, label, input) => h('label', {
+        className: 'dsh-quota-dock-field',
+        key,
+      }, h('span', { className: 'dsh-quota-dock-field-label', key: 'label' }, label), input)
+      const preset = PRESETS.find(entry => entry.id === form.preset) ?? PRESETS[0]
+      const fixedAddress = preset.id === 'openrouter'
+      const age = ageText(snapshot, t)
+      const cc = snapshot?.cc ?? {}
+      const deepseek = snapshot?.deepseek ?? {}
+      const cap = toNum(cc.monthlyCap)
+      const used = toNum(cc.usedMonthlyCredits)
+      const percent = cap !== null && cap > 0 && used !== null ? Math.round((used / cap) * 100) : null
+      const wallet = Array.isArray(deepseek.balances) ? deepseek.balances[0] : null
+      const builtinRow = (key, name, ref, value, ok) => h('div', {
+        className: 'dsh-quota-dock-brow',
+        key,
+      },
+      h('div', { className: 'dsh-quota-dock-brow-main', key: 'main' },
+        h('span', {
+          className: 'dsh-quota-dock-dot',
+          'data-quota-dot': ok === true ? 'ok' : 'bad',
+          'aria-hidden': true,
+          key: 'dot',
+        }),
+        h('div', { className: 'dsh-quota-dock-brow-text', key: 'text' },
+          h('div', { className: 'dsh-quota-dock-brow-name', key: 'name' }, name),
+          h('div', { className: 'dsh-quota-dock-brow-sub', key: 'sub' }, ref))),
+      h('span', { className: 'dsh-quota-dock-brow-value', key: 'value' }, value),
+      h('span', { className: 'dsh-quota-dock-brow-age', key: 'age' }, age),
+      h('button', {
+        type: 'button',
+        className: 'dsh-quota-dock-ghost dsh-quota-dock-ghost-sm',
+        key: 'refresh',
+        disabled: busy === true,
+        onClick: onRefresh,
+      }, t('refresh')))
+      const listBody = platforms === null
+        ? [h('div', { className: 'dsh-quota-dock-empty', key: 'waiting' }, t('fetchingNow'))]
+        : platforms.length === 0
+          ? [h('div', { className: 'dsh-quota-dock-empty-row', key: 'empty' },
+              h('div', { key: 'text' },
+                h('div', { className: 'dsh-quota-dock-empty-title', key: 'title' }, t('emptyList')),
+                h('div', { className: 'dsh-quota-dock-empty-sub', key: 'sub' }, t('emptyHint'))),
+              h('button', {
+                type: 'button',
+                className: 'dsh-quota-dock-ghost dsh-quota-dock-ghost-sm',
+                key: 'jump',
+                onClick: () => {
+                  if (typeof document === 'undefined') return
+                  const node = document.querySelector('[data-quota-section="add"]')
+                  if (node !== null && typeof node.scrollIntoView === 'function') node.scrollIntoView({ block: 'nearest' })
+                },
+              }, t('addExisting')))]
+          : platforms.map((entry, index) => platformRow(entry, index, t, onRemove))
+      const chip = entry => h('button', {
+        type: 'button',
+        className: 'dsh-quota-dock-pill',
+        'data-quota-preset': entry.id,
+        'data-active': form.preset === entry.id ? '' : undefined,
+        key: entry.id,
+        onClick: () => onForm({ preset: entry.id, name: entry.name, baseUrl: entry.baseUrl, kind: entry.kind }),
+      }, entry.name === '' ? t('presetCustom') : entry.name)
+      const pref = (key, label, control) => h('div', { className: 'dsh-quota-dock-pref', key },
+        h('span', { className: 'dsh-quota-dock-pref-label', key: 'label' }, label),
+        h('div', { className: 'dsh-quota-dock-pref-control', key: 'control' }, control))
+      return h('div', { className: 'dsh-quota-dock-set', 'data-quota-settings': '' },
+        h('div', { className: 'dsh-quota-dock-set-head' },
+          h('h2', { className: 'dsh-quota-dock-set-title' }, t('settingsTitle')),
+          h('button', {
+            type: 'button',
+            className: 'dsh-quota-dock-ghost',
+            key: 'refresh',
+            disabled: busy === true,
+            onClick: onRefresh,
+          }, t('refresh'))),
+        h('p', { className: 'dsh-quota-dock-set-hint' }, t('settingsHint')),
+        section('builtin', t('sectionBuiltin'), t('builtinNote'), [
+          h('div', { className: 'dsh-quota-dock-card-flat', key: 'rows' },
+            builtinRow('cc', 'Command Code', 'COMMANDCODE_API_KEY',
+              percent === null ? '—' : `${t('monthly')} ${percent}%`, cc.ok === true),
+            builtinRow('deepseek', 'DeepSeek', 'DEEPSEEK_API_KEY',
+              wallet === null ? '—' : moneyText(wallet.totalBalance, wallet.currency), deepseek.ok === true)),
+        ]),
+        section('platforms', t('sectionPlatforms'), platforms === null ? null : String(platforms.length), [
+          h('div', { className: 'dsh-quota-dock-list', key: 'list' }, ...listBody),
+        ]),
+        section('add', t('sectionAdd'), t('presetHint'), [
+          h('div', { className: 'dsh-quota-dock-pills', key: 'pills' }, ...PRESETS.map(chip)),
+          fixedAddress
+            ? h('div', { className: 'dsh-quota-dock-fixed', key: 'fixed' },
+                h('span', { className: 'dsh-quota-dock-field-label', key: 'label' }, t('baseUrl')),
+                h('code', { className: 'dsh-quota-dock-file', key: 'value' }, PRESETS[0].baseUrl),
+                h('p', { className: 'dsh-quota-dock-hint', key: 'hint' }, t('fixedAddress')))
+            : field('name', t('platformName'), h('input', {
+                value: form.name,
+                placeholder: 'LiteLLM',
+                onChange: event => onForm({ name: event.target.value }),
+              })),
+          fixedAddress
+            ? null
+            : field('baseUrl', t('baseUrl'), h('input', {
+                value: form.baseUrl,
+                placeholder: 'https://…',
+                onChange: event => onForm({ baseUrl: event.target.value }),
+              })),
+          field('apiKey', t('apiKey'), h('input', {
+            type: 'password',
+            value: form.apiKey,
+            onChange: event => onForm({ apiKey: event.target.value }),
+          })),
+          h('p', { className: 'dsh-quota-dock-hint', key: 'hint' }, t('addressHint')),
+          h('p', { className: 'dsh-quota-dock-hint', key: 'key-hint' }, t('aboutText')),
+          h('div', { className: 'dsh-quota-dock-form-actions', key: 'actions' },
+            h('button', {
+              type: 'button',
+              className: 'dsh-quota-dock-submit',
+              key: 'submit',
+              disabled: busy === true || form.apiKey.trim() === '',
+              onClick: onAdd,
+            }, t('add'))),
+        ]),
+        section('data', t('sectionData'), null, [
+          h('div', { className: 'dsh-quota-dock-prefs', key: 'prefs' },
+            pref('interval', t('intervalLabel'),
+              h('div', { className: 'dsh-quota-dock-pref-control' },
+                h('select', {
+                  className: 'dsh-quota-dock-select',
+                  value: String(refreshMs),
+                  onChange: event => onInterval(Number(event.target.value)),
+                }, ...REFRESH_CHOICES.map(ms => h('option', { value: String(ms), key: ms }, intervalLabel(ms, t)))),
+                h('button', {
+                  type: 'button',
+                  className: 'dsh-quota-dock-ghost dsh-quota-dock-ghost-sm',
+                  key: 'now',
+                  disabled: busy === true,
+                  onClick: onRefresh,
+                }, t('refreshNowLabel')))),
+            pref('age', t('lastRefresh'),
+              h('span', { className: 'dsh-quota-dock-pref-value', key: 'v' }, age)),
+            pref('file', t('storeFile'),
+              h('code', { className: 'dsh-quota-dock-file', key: 'v' },
+                storePath === null || storePath === undefined ? '—' : String(storePath)))),
+        ]),
+        message === null || message === undefined
+          ? null
+          : h('div', { className: 'dsh-quota-dock-pmsg', key: 'message' }, String(message)))
+    }
+
     const CSS = [
       // Full-width row above the composer card: the input dock's type scale, laid
       // out as wrapping flex items instead of `·` separators.
       '.dsh-quota-dock-root {',
-      '  display: flex; align-items: center; width: 100%; box-sizing: border-box;',
-      '  padding: 2px 2px 6px; color: var(--dsw-alias-label-tertiary);',
+      '  position: relative; display: inline-flex; align-items: center; width: 100%;',
+      '  box-sizing: border-box; padding: 2px 2px 6px;',
+      '  color: var(--dsw-alias-label-tertiary, #8a8a8a);',
       '  font-size: 12px; line-height: 18px; font-variant-numeric: tabular-nums;',
       '}',
+      '.dsh-quota-dock-row {',
+      '  display: inline-flex; flex: 0 1 auto; min-width: 0; margin: 0 auto; justify-content: center; align-items: center;',
+      '  gap: 8px; padding: 2px 10px; border: 0; border-radius: 6px; background: transparent;',
+      '  color: inherit; font: inherit; cursor: pointer;',
+      '}',
+      '.dsh-quota-dock-row:hover { background: var(--dsw-alias-fill-l2, rgb(127 127 127 / 18%)); }',
+      '.dsh-quota-dock-row:focus-visible {',
+      '  outline: 1px solid var(--dsw-alias-border-l3, rgb(127 127 127 / 40%)); outline-offset: 1px;',
+      '}',
       '.dsh-quota-dock-strip {',
-      '  display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px;',
-      '  flex: 1 1 auto; min-width: 0;',
+      '  display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px;',
+      '  flex: 0 1 auto; min-width: 0;',
       '}',
       '.dsh-quota-dock-cell { display: inline-flex; align-items: center; gap: 6px; flex: none; }',
-      '.dsh-quota-dock-label { color: var(--dsw-alias-label-tertiary); font-weight: 500; }',
-      '.dsh-quota-dock-pct { flex: none; color: var(--dsw-alias-label-secondary); font-weight: 500; }',
-      '.dsh-quota-dock-pct[data-level="warn"] { color: var(--dsw-alias-state-warn-primary); }',
-      '.dsh-quota-dock-pct[data-level="high"] { color: var(--dsw-alias-state-error-primary); }',
-      '.dsh-quota-dock-pct[data-level="unknown"] { color: var(--dsw-alias-label-tertiary); }',
+      '.dsh-quota-dock-label { color: var(--dsw-alias-label-tertiary, #8a8a8a); font-weight: 500; }',
+      '.dsh-quota-dock-pct { flex: none; color: var(--dsw-alias-label-secondary, #6b6b6b); font-weight: 500; }',
+      '.dsh-quota-dock-pct[data-level="warn"] { color: var(--dsw-alias-state-warn-primary, #e0a03a); }',
+      '.dsh-quota-dock-pct[data-level="high"] { color: var(--dsw-alias-state-error-primary, #e0574f); }',
+      '.dsh-quota-dock-pct[data-level="unknown"] { color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
       '.dsh-quota-dock-bar {',
       '  display: inline-block; flex: none; width: 48px; height: 7px; border-radius: 999px;',
-      '  box-sizing: border-box; border: 1px solid var(--dsw-alias-border-l2);',
-      '  background: var(--dsw-alias-fill-l2); overflow: hidden;',
+      '  box-sizing: border-box; border: 1px solid var(--dsw-alias-border-l2, rgb(127 127 127 / 28%));',
+      '  background: var(--dsw-alias-fill-l2, rgb(127 127 127 / 18%)); overflow: hidden;',
       '}',
       '.dsh-quota-dock-bar-fill {',
       '  display: block; height: 100%; border-radius: inherit;',
-      '  background: #7BB295; transition: width 160ms ease-out;',
+      '  background: #7BB295;',
+      '  transition: width 150ms ease-out;',
       '}',
       '.dsh-quota-dock-bar[data-level="warn"] .dsh-quota-dock-bar-fill {',
-      '  background: var(--dsw-alias-state-warn-primary);',
+      '  background: var(--dsw-alias-state-warn-primary, #e0a03a);',
       '}',
       '.dsh-quota-dock-bar[data-level="high"] .dsh-quota-dock-bar-fill {',
-      '  background: var(--dsw-alias-state-error-primary);',
+      '  background: var(--dsw-alias-state-error-primary, #e0574f);',
       '}',
       '.dsh-quota-dock-bar[data-level="unknown"] .dsh-quota-dock-bar-fill { background: transparent; }',
-      '.dsh-quota-dock-ds { display: inline-flex; align-items: center; gap: 8px; flex: none; }',
+      '.dsh-quota-dock-ds { display: inline-flex; align-items: center; gap: 10px; flex: none; }',
       '.dsh-quota-dock-divider { flex: none; width: 1px; height: 12px; margin: 0 4px;',
-      '  background: var(--dsw-alias-border-l3); }',
+      '  background: var(--dsw-alias-border-l2, rgb(127 127 127 / 28%)); }',
       '.dsh-quota-dock-track {',
       '  position: relative; display: inline-flex; flex: none; width: 56px; height: 7px;',
-      '  box-sizing: border-box; border: 1px solid var(--dsw-alias-border-l2);',
-      '  border-radius: 999px; background: var(--dsw-alias-fill-l2); overflow: hidden;',
+      '  box-sizing: border-box; border: 1px solid var(--dsw-alias-border-l2, rgb(127 127 127 / 28%));',
+      '  border-radius: 999px; background: var(--dsw-alias-fill-l2, rgb(127 127 127 / 18%)); overflow: hidden;',
       '}',
       '.dsh-quota-dock-track-peak {',
-      '  display: block; height: 100%; background: var(--dsw-alias-state-warn-primary);',
+      '  display: block; height: 100%; background: var(--dsw-alias-state-warn-primary, #e0a03a);',
       '}',
-      '.dsh-quota-dock-track-off { display: block; height: 100%; background: #5B9BF3; }',
+      '.dsh-quota-dock-track-off {',
+      '  display: block; height: 100%; background: var(--dsw-alias-brand-primary, #5B9BF3);',
+      '}',
       '.dsh-quota-dock-marker {',
       '  position: absolute; top: 0; bottom: 0; width: 1px; z-index: 1;',
-      '  background: var(--dsw-alias-label-primary);',
-      '  box-shadow: 0 0 0 1px var(--dsw-alias-bg-layer-1);',
+      '  background: var(--dsw-alias-label-primary, #1a1a1a);',
+      '  box-shadow: 0 0 0 1px var(--dsw-alias-bg-layer-1, #fff);',
       '}',
       '.dsh-quota-dock-tier { font-weight: 500; }',
-      '.dsh-quota-dock-until { color: var(--dsw-alias-label-tertiary); }',
-      '.dsh-quota-dock-root[data-warn] .dsh-quota-dock-strip { color: var(--dsw-alias-label-secondary); }',
-      '.dsh-quota-dock-warn { flex: none; margin-left: 6px; color: var(--dsw-alias-label-secondary); }',
+      '.dsh-quota-dock-until { color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
+      '.dsh-quota-dock-root[data-warn] .dsh-quota-dock-strip { color: var(--dsw-alias-label-secondary, #6b6b6b); }',
+      '.dsh-quota-dock-warn { flex: none; margin-left: 6px; color: var(--dsw-alias-label-secondary, #6b6b6b); }',
+      // The money sheet: a centred floating panel, wide and tall enough to read,
+      // never as small as a tooltip.
+      '.dsh-quota-dock-layer { position: fixed; inset: 0; z-index: 900; display: flex; align-items: center; justify-content: center; padding: 24px; pointer-events: none; }',
+      '.dsh-quota-dock-sheet {',
+      '  position: relative; margin: 0; pointer-events: auto; z-index: 900;',
+      '  width: min(820px, 90vw); max-height: 78vh; overflow: auto; box-sizing: border-box;',
+      '  border-radius: 14px; background: var(--dsw-alias-bg-l1, #fff);',
+      '  box-shadow: 0 24px 64px -12px rgba(0, 0, 0, .22), 0 2px 8px rgba(0, 0, 0, .06); padding: 0;',
+      '  color: var(--dsw-alias-label-primary, #1a1a1a); font-size: 13px; line-height: 1.6;',
+      '  animation: dsh-quota-sheet-in 180ms ease-out;',
+      '}',
+      '@keyframes dsh-quota-sheet-in {',
+      '  from { transform: translateY(-24px); opacity: 0; }',
+      '  to { transform: translateY(0); opacity: 1; }',
+      '}',
+      '.dsh-quota-dock-sheet-head { display: flex; align-items: center; gap: 10px; padding: 15px 20px 13px; }',
+      '.dsh-quota-dock-sheet-title { font-size: 14.5px; font-weight: 600; }',
+      '.dsh-quota-dock-sheet-age { color: var(--dsw-alias-label-tertiary, #8a8a8a);',
+      '  font-size: 11.5px; font-variant-numeric: tabular-nums; }',
+      // The divider is a full-bleed hairline under the hero, not a boxed rule.
+      '.dsh-quota-dock-rule { height: 1px; margin: 0 20px;',
+      '  background: var(--dsw-alias-border-l2, rgb(127 127 127 / 28%)); }',
+      '.dsh-quota-dock-ghost { margin-left: auto; height: 28px; min-height: 28px; padding: 0 10px; cursor: pointer;',
+      '  font: inherit; font-size: 12px; border: 1px solid var(--dsw-alias-border-l2, rgb(127 127 127 / 28%));',
+      '  border-radius: 7px; background: transparent; color: var(--dsw-alias-label-secondary, #6b6b6b);',
+      '  transition: color 150ms ease-out, border-color 150ms ease-out; }',
+      '.dsh-quota-dock-ghost:hover { color: var(--dsw-alias-label-primary, #1a1a1a);',
+      '  border-color: var(--dsw-alias-border-l3, rgb(127 127 127 / 40%)); }',
+      '.dsh-quota-dock-ghost:disabled { opacity: .5; cursor: default; }',
+      '.dsh-quota-dock-sheet-close { box-sizing: border-box; width: 27px; height: 27px; flex: none;',
+      '  border: 0; border-radius: 7px; background: transparent; cursor: pointer;',
+      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); font-size: 16px; line-height: 1;',
+      '  transition: color 150ms ease-out; }',
+      '.dsh-quota-dock-sheet-close:hover { color: var(--dsw-alias-label-primary, #1a1a1a); }',
+      // The hero: one plate, one message — how much of the month is left. The
+      // label sits above the number, the two supporting figures beside it.
+      '.dsh-quota-dock-hero { display: flex; align-items: flex-end; gap: 26px; flex-wrap: wrap;',
+      '  box-sizing: border-box; padding: 2px 20px 16px; font-variant-numeric: tabular-nums; }',
+      '.dsh-quota-dock-hero-main { display: flex; flex-direction: column; gap: 3px; }',
+      '.dsh-quota-dock-hero-label { font-size: 11.5px; letter-spacing: .02em;',
+      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
+      '.dsh-quota-dock-hero-value { font-size: 30px; font-weight: 650; line-height: 1.12;',
+      '  letter-spacing: -0.01em; }',
+      '.dsh-quota-dock-hero-side { display: flex; gap: 24px; padding-bottom: 4px; }',
+      '.dsh-quota-dock-hero-stat { display: flex; flex-direction: column; gap: 2px; }',
+      '.dsh-quota-dock-hero-stat-label { font-size: 11.5px; color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
+      '.dsh-quota-dock-hero-stat-value { font-size: 14px; font-weight: 600;',
+      '  color: var(--dsw-alias-label-secondary, #6b6b6b); }',
+      '.dsh-quota-dock-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 16px 20px 18px; }',
+      '.dsh-quota-dock-card { box-sizing: border-box; min-width: 0; padding: 13px 14px 12px;',
+      '  align-self: start;',
+      '  border: 1px solid var(--dsw-alias-border-l2, rgb(127 127 127 / 28%)); border-radius: 11px; }',
+      // Command Code owns its own full-width row: three windows do not fit in a column.
+      '.dsh-quota-dock-card-wide { grid-column: 1 / -1; }',
+      '.dsh-quota-dock-card-head { display: flex; align-items: baseline; justify-content: space-between;',
+      '  gap: 10px; margin-bottom: 2px; }',
+      '.dsh-quota-dock-card-title { font-size: 12.5px; font-weight: 600; }',
+      '.dsh-quota-dock-card-note { font-size: 11px; color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
+      // A Command Code window: label | used/cap | bar | percentage | reset.
+      '.dsh-quota-dock-qrow { display: grid; grid-template-columns: 40px 112px 1fr 46px 88px;',
+      '  align-items: center; gap: 10px; padding: 8px 0; min-width: 0; }',
+      '.dsh-quota-dock-qrow + .dsh-quota-dock-qrow {',
+      '  border-top: 1px solid var(--dsw-alias-border-l2, rgb(127 127 127 / 28%)); }',
+      '.dsh-quota-dock-qk { font-size: 12px; color: var(--dsw-alias-label-secondary, #6b6b6b); }',
+      '.dsh-quota-dock-qv { font-size: 12.5px; font-weight: 600; text-align: right;',
+      '  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }',
+      '.dsh-quota-dock-qrow .dsh-quota-dock-bar { width: auto; height: 5px; }',
+      '.dsh-quota-dock-qrow .dsh-quota-dock-pct { font-size: 12px; font-weight: 600;',
+      '  text-align: right; font-variant-numeric: tabular-nums; }',
+      '.dsh-quota-dock-qr { font-size: 11px; text-align: right; white-space: nowrap;',
+      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); font-variant-numeric: tabular-nums; }',
+      // The month's own figures, flattened onto one line under the month row.
+      '.dsh-quota-dock-detail { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px;',
+      '  padding: 8px 0 2px 50px; font-size: 11.5px; line-height: 1.5;',
+      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
+      '.dsh-quota-dock-detail-sep { color: var(--dsw-alias-border-l3, rgb(127 127 127 / 40%)); }',
+      '.dsh-quota-dock-detail b { font-weight: 600; color: var(--dsw-alias-label-secondary, #6b6b6b);',
+      '  font-variant-numeric: tabular-nums; }',
+      // Key/value rows on a shared baseline: the label left, the number right.
+      '.dsh-quota-dock-kv { display: grid; grid-template-columns: 1fr auto; gap: 7px 12px;',
+      '  align-items: center; margin-top: 6px; font-variant-numeric: tabular-nums; }',
+      '.dsh-quota-dock-kv-label { font-size: 12px; color: var(--dsw-alias-label-secondary, #6b6b6b); }',
+      '.dsh-quota-dock-kv-value { font-size: 12.5px; font-weight: 600; text-align: right; white-space: nowrap; }',
+      // The state mark: a dot plus the word, never colour alone.
+      '.dsh-quota-dock-status { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px;',
+      '  font-size: 12px; font-weight: 500; color: var(--dsw-alias-state-success-primary, #7bb295); }',
+      '.dsh-quota-dock-status i { width: 6px; height: 6px; flex: none; border-radius: 50%;',
+      '  background: currentColor; box-shadow: 0 0 0 3px rgb(123 178 149 / 16%); }',
+      '.dsh-quota-dock-status[data-state="bad"] { color: var(--dsw-alias-state-error-primary, #e0574f); }',
+      '.dsh-quota-dock-status[data-state="bad"] i { box-shadow: 0 0 0 3px rgb(224 87 79 / 16%); }',
+      // A quiet footnote inside a card, separated by a hairline above it.
+      '.dsh-quota-dock-note { margin: 10px 0 0; padding-top: 9px; font-size: 11.5px; line-height: 1.55;',
+      '  color: var(--dsw-alias-label-tertiary, #8a8a8a);',
+      '  border-top: 1px solid var(--dsw-alias-border-l2, rgb(127 127 127 / 28%)); }',
+      '.dsh-quota-dock-note b { font-weight: 600; color: var(--dsw-alias-label-secondary, #6b6b6b); }',
+      // A card that has nothing to show says why, without a rule above it.
+      '.dsh-quota-dock-note-solo { margin-top: 6px; padding-top: 0; border-top: 0; }',
+      '.dsh-quota-dock-cur { margin-bottom: 4px; font-size: 11px; font-weight: 600;',
+      '  letter-spacing: 0.06em; color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
+      '.dsh-quota-dock-prow { display: flex; align-items: center; gap: 8px; min-height: 32px; min-width: 0; }',
+      '.dsh-quota-dock-prow-name { min-width: 0; overflow: hidden; text-overflow: ellipsis;',
+      '  white-space: nowrap; }',
+      '.dsh-quota-dock-prow-kind { flex: none; font-size: 11px;',
+      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
+      '.dsh-quota-dock-prow-money { flex: none; margin-left: auto; font-size: 14px; font-weight: 600;',
+      '  font-variant-numeric: tabular-nums; }',
+      '.dsh-quota-dock-empty { font-size: 13px; color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
+      // The footer names the cadence on the left and where the form lives on the
+      // right, on a tinted strip so it reads as chrome rather than as a card.
+      '.dsh-quota-dock-sheet-foot { display: flex; align-items: center; justify-content: space-between;',
+      '  gap: 10px; padding: 11px 20px 13px; font-size: 11.5px;',
+      '  color: var(--dsw-alias-label-tertiary, #8a8a8a);',
+      '  border-top: 1px solid var(--dsw-alias-border-l2, rgb(127 127 127 / 28%));',
+      '  background: var(--dsw-alias-fill-l1, rgb(127 127 127 / 6%)); }',
+      // The settings page: configuration only, so nothing here is money.
+      '.dsh-quota-dock-set { display: block; max-width: 640px;',
+      '  color: var(--dsw-alias-label-primary, #1a1a1a); font-size: 13px; line-height: 1.6; }',
+      '.dsh-quota-dock-set-head { display: flex; align-items: center; gap: 12px; }',
+      '.dsh-quota-dock-set-title { margin: 0; font-size: 16px; font-weight: 600; }',
+      '.dsh-quota-dock-set-title + .dsh-quota-dock-ghost { margin-left: auto; }',
+      '.dsh-quota-dock-set-hint { margin: 4px 0 24px; font-size: 13px;',
+      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
+      '.dsh-quota-dock-sec { margin-bottom: 24px; }',
+      '.dsh-quota-dock-sec-title { margin: 0 0 8px; font-size: 12px; font-weight: 600; }',
+      '.dsh-quota-dock-list { display: block; }',
+      '.dsh-quota-dock-plat { display: flex; align-items: center; gap: 8px; min-height: 44px;',
+      '  padding: 0 8px; border-radius: 8px; transition: background-color 150ms ease-out; }',
+      '.dsh-quota-dock-plat:hover { background: var(--dsw-alias-fill-l1, rgb(127 127 127 / 8%)); }',
+      '.dsh-quota-dock-dot { flex: none; width: 8px; height: 8px; border-radius: 999px;',
+      '  background: var(--dsw-alias-label-quaternary, #b0b0b0); }',
+      '.dsh-quota-dock-dot[data-quota-dot="ok"] { background: #7BB295; }',
+      '.dsh-quota-dock-dot[data-quota-dot="bad"] { background: #E0574F; }',
+      '.dsh-quota-dock-pname { min-width: 0; overflow: hidden; text-overflow: ellipsis;',
+      '  white-space: nowrap; font-size: 14px; font-weight: 600; }',
+      '.dsh-quota-dock-badge { flex: none; padding: 1px 6px; border-radius: 4px; font-size: 11px;',
+      '  background: var(--dsw-alias-fill-l1, rgb(127 127 127 / 8%));',
+      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
+      '.dsh-quota-dock-pstate { flex: none; font-size: 11px;',
+      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
+      '.dsh-quota-dock-pmoney { flex: none; margin-left: auto; font-size: 14px; font-weight: 600;',
+      '  font-variant-numeric: tabular-nums; }',
+      '.dsh-quota-dock-remove { flex: none; min-height: 32px; padding: 0 8px; cursor: pointer;',
+      '  font: inherit; font-size: 12px; border: 0; border-radius: 8px; background: transparent;',
+      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); transition: color 150ms ease-out; }',
+      '.dsh-quota-dock-remove:hover { color: #E0574F; }',
+      '.dsh-quota-dock-form { margin-top: 4px; }',
+      '.dsh-quota-dock-pills { display: flex; gap: 8px; }',
+      '.dsh-quota-dock-pill { min-height: 36px; padding: 0 14px; cursor: pointer; font: inherit;',
+      '  font-size: 13px; border: 1px solid var(--dsw-alias-border-l2, rgb(127 127 127 / 28%));',
+      '  border-radius: 999px; background: transparent; color: var(--dsw-alias-label-secondary, #6b6b6b);',
+      '  transition: color 150ms ease-out, background-color 150ms ease-out; }',
+      '.dsh-quota-dock-pill[data-active] { border-color: transparent;',
+      '  background: var(--dsw-alias-fill-l2, rgb(127 127 127 / 18%));',
+      '  color: var(--dsw-alias-label-primary, #1a1a1a); }',
+      '.dsh-quota-dock-field { display: block; margin-top: 12px; }',
+      '.dsh-quota-dock-field-label { display: block; margin-bottom: 6px; font-size: 12px;',
+      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
+      '.dsh-quota-dock-field input { box-sizing: border-box; width: 100%; height: 36px; padding: 0 10px;',
+      '  border: 1px solid var(--dsw-alias-border-l2, rgb(127 127 127 / 28%)); border-radius: 8px;',
+      '  background: transparent; color: inherit; font: inherit; }',
+      '.dsh-quota-dock-submit { display: block; box-sizing: border-box; width: 100%; height: 36px;',
+      '  margin-top: 16px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600;',
+      '  border: 0; border-radius: 8px; background: #5B9BF3; color: #fff;',
+      '  transition: opacity 150ms ease-out; }',
+      '.dsh-quota-dock-submit:hover { opacity: .88; }',
+      '.dsh-quota-dock-submit:disabled { opacity: .5; cursor: default; }',
+      '.dsh-quota-dock-about { margin: 0; font-size: 12px;',
+      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
+      '.dsh-quota-dock-pmsg { margin-top: 12px; font-size: 12px;',
+      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
+      // ---- settings v3 (2026-10-18): provider rows, presets, cadence ----
+      '.dsh-quota-dock-sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }',
+      '.dsh-quota-dock-sec-aside { font-size: 11.5px; color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
+      '.dsh-quota-dock-card-flat { border: 1px solid var(--dsw-alias-border-l1, rgb(127 127 127 / 16%)); border-radius: 12px; padding: 2px 12px; }',
+      '.dsh-quota-dock-brow { display: flex; align-items: center; gap: 12px; min-height: 46px; }',
+      '.dsh-quota-dock-brow + .dsh-quota-dock-brow { border-top: 1px solid var(--dsw-alias-border-l1, rgb(127 127 127 / 16%)); }',
+      '.dsh-quota-dock-brow-main { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; }',
+      '.dsh-quota-dock-brow-text { min-width: 0; }',
+      '.dsh-quota-dock-brow-name { font-size: 13px; font-weight: 500; }',
+      '.dsh-quota-dock-brow-sub { margin-top: 2px; font-size: 11.5px; color: var(--dsw-alias-label-tertiary, #8a8a8a); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }',
+      '.dsh-quota-dock-brow-value { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }',
+      '.dsh-quota-dock-brow-age { min-width: 62px; text-align: right; font-size: 11.5px; color: var(--dsw-alias-label-tertiary, #8a8a8a); white-space: nowrap; }',
+      '.dsh-quota-dock-pills { flex-wrap: wrap; }',
+      '.dsh-quota-dock-empty-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px; border: 1px dashed var(--dsw-alias-border-l2, rgb(127 127 127 / 30%)); border-radius: 12px; }',
+      '.dsh-quota-dock-empty-title { font-size: 12.5px; }',
+      '.dsh-quota-dock-empty-sub { margin-top: 3px; font-size: 11.5px; color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
+      '.dsh-quota-dock-fixed { margin-top: 12px; }',
+      '.dsh-quota-dock-hint { margin: 7px 0 0; font-size: 11.5px; line-height: 1.6; color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
+      '.dsh-quota-dock-file { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
+      '.dsh-quota-dock-form-actions { display: flex; justify-content: flex-end; margin-top: 14px; }',
+      '.dsh-quota-dock-form-actions .dsh-quota-dock-submit { width: auto; padding: 0 18px; }',
+      '.dsh-quota-dock-prefs { border: 1px solid var(--dsw-alias-border-l1, rgb(127 127 127 / 16%)); border-radius: 12px; padding: 2px 12px; }',
+      '.dsh-quota-dock-pref { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 42px; }',
+      '.dsh-quota-dock-pref + .dsh-quota-dock-pref { border-top: 1px solid var(--dsw-alias-border-l1, rgb(127 127 127 / 16%)); }',
+      '.dsh-quota-dock-pref-label { font-size: 12.5px; color: var(--dsw-alias-label-secondary, #5f6368); }',
+      '.dsh-quota-dock-pref-control { display: flex; align-items: center; gap: 10px; }',
+      '.dsh-quota-dock-pref-value { font-size: 12.5px; font-variant-numeric: tabular-nums; }',
+      '.dsh-quota-dock-select { height: 30px; padding: 0 8px; font: inherit; font-size: 12.5px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2, rgb(127 127 127 / 30%)); background: var(--dsw-alias-bg-l0, #fff); color: var(--dsw-alias-label-primary, #17181a); cursor: pointer; }',
+      '.dsh-quota-dock-ghost-sm { min-height: 28px; padding: 0 10px; font-size: 12px; }',
+      '.dsh-quota-dock-pill:focus-visible, .dsh-quota-dock-remove:focus-visible,',
+      '.dsh-quota-dock-ghost:focus-visible, .dsh-quota-dock-sheet-close:focus-visible,',
+      '.dsh-quota-dock-submit:focus-visible, .dsh-quota-dock-field input:focus-visible {',
+      '  outline: 2px solid var(--dsw-alias-brand-primary, #5B9BF3); outline-offset: 2px;',
+      '}',
+      '@media (prefers-reduced-motion: reduce) {',
+      '  .dsh-quota-dock-sheet { animation: none; }',
+      '  .dsh-quota-dock-bar-fill, .dsh-quota-dock-plat, .dsh-quota-dock-pill,',
+      '  .dsh-quota-dock-ghost, .dsh-quota-dock-remove, .dsh-quota-dock-submit,',
+      '  .dsh-quota-dock-sheet-close { transition: none; }',
+      '}',
     ].join('\n')
     const STYLE = h('style', { key: 'quota-dock-style' }, CSS)
 
@@ -436,15 +1412,93 @@ window.__ModuleLoader__.load({
       return snapshot
     }
 
-    /** Entry composed into the `conversation.input.dock` slot, above the composer. */
-    function QuotaDock({ load, t }) {
-      const [snapshot, setSnapshot] = React.useState(null)
-      const [failed, setFailed] = React.useState(false)
-      // True until the first load settles, so 查询中… does not depend on the Host
-      // having set `fetching` on the very first snapshot.
-      const [loading, setLoading] = React.useState(true)
-      // Drives the 峰/谷 countdown re-render; the value itself is never read.
-      const [, setTick] = React.useState(0)
+    /** GET the platform document: list, cadence and store path. */
+    async function fetchPlatforms() {
+      const response = await fetch(PLATFORMS_URL, {
+        headers: { accept: 'application/json' },
+        signal: timeoutSignal(15000),
+      })
+      if (response === null || response === undefined || response.ok !== true) {
+        throw new Error(`HTTP ${response !== null && response !== undefined ? response.status : '?'}`)
+      }
+      const body = JSON.parse(await response.text())
+      if (!Array.isArray(body?.platforms)) throw new Error('platform list missing')
+      return body
+    }
+
+    /** POST an add, remove or settings action; returns the fresh document. */
+    async function postPlatforms(payload) {
+      const response = await fetch(PLATFORMS_URL, {
+        method: 'POST',
+        headers: { accept: 'application/json', 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: timeoutSignal(15000),
+      })
+      const text = response !== null && response !== undefined ? await response.text() : ''
+      let body = null
+      try {
+        body = JSON.parse(text)
+      } catch (error) {
+        body = null
+      }
+      if (response === null || response === undefined || response.ok !== true) {
+        throw new Error(body?.error ?? `HTTP ${response !== null && response !== undefined ? response.status : '?'}`)
+      }
+      return body !== null && typeof body === 'object' ? body : { platforms: [] }
+    }
+
+    /** `Error: x` as a plain string, whatever was thrown. */
+    const messageOf = error => String(
+      error !== null && error !== undefined && error.message ? error.message : error)
+
+    /**
+     * Which conversation the row is looking at. The input dock passes the
+     * session's own snapshot down as `SessionSnapshot`; without it we fall back
+     * to the document URL, which changes as the app moves between sessions.
+     */
+    function sessionKeyOf(props) {
+      const source = props?.SessionSnapshot ?? props?.sessionSnapshot ?? props?.session
+      const id = source?.id ?? source?.sessionId ?? source?.session?.id
+      if (id !== null && id !== undefined && String(id) !== '') return String(id)
+      if (typeof window !== 'undefined' && window.location) return String(window.location.href)
+      return ''
+    }
+
+    let refreshInFlight = null
+
+    /**
+     * Ask the Host for a fresh read, then adopt whatever it reports. Single
+     * flight on this side, with the Host's own dedupe behind it, so a session
+     * switch landing on top of a button press still sends one request.
+     */
+    function refreshNow() {
+      if (refreshInFlight !== null) return refreshInFlight
+      publish({ busy: true })
+      refreshInFlight = Promise.resolve()
+        .then(() => fetch(REFRESH_URL, { method: 'POST', signal: timeoutSignal(15000) }))
+        .then(
+          () => readSnapshot(),
+          () => readSnapshot(),
+        )
+        .then(next => {
+          refreshInFlight = null
+          publish({ busy: false })
+          if (next !== null && next !== undefined) publish({ snapshot: next, phase: 'ready' })
+          else if (store.snapshot === null) publish({ phase: 'failed' })
+          return next
+        })
+      return refreshInFlight
+    }
+
+    /**
+     * Entry composed into the `conversation.input.dock` slot, above the composer.
+     * It owns the only read of the snapshot — on mount and on a session switch;
+     * the sheet and the settings page read the store it publishes, and the
+     * refresh buttons call refreshNow directly.
+     */
+    function QuotaDock(props) {
+      const state = useStore()
+      const { load, t } = props
       // The injected face is rebuilt on every render, so the loader rides a ref
       // and never enters a dependency array.
       const loader = React.useRef(load)
@@ -453,15 +1507,11 @@ window.__ModuleLoader__.load({
       React.useEffect(() => {
         let live = true
         const adopt = next => {
-          if (live) {
-            setSnapshot(next)
-            setFailed(false)
-          }
+          if (live) publish({ snapshot: next, phase: 'ready' })
         }
         const pull = () => {
           if (typeof loader.current !== 'function') {
-            setLoading(false)
-            setFailed(true)
+            publish({ phase: 'failed' })
             return
           }
           Promise.resolve()
@@ -469,35 +1519,44 @@ window.__ModuleLoader__.load({
             .then(
               next => {
                 if (!live) return
-                setLoading(false)
-                if (next === null || next === undefined) setFailed(true)
+                if (next === null || next === undefined) publish({ phase: 'failed' })
                 else adopt(next)
               },
               () => {
-                if (!live) return
-                setLoading(false)
-                setFailed(true)
+                if (live) publish({ phase: 'failed' })
               },
             )
         }
         pull()
         if (typeof window === 'undefined') return undefined
-        const timer = window.setInterval(pull, REFRESH_MS)
-        const ticker = window.setInterval(() => { setTick(value => value + 1) }, TICK_MS)
-        const onFocus = () => { pull() }
-        window.addEventListener('focus', onFocus)
+        // No background poll: the numbers refresh on a session switch, on the
+        // refresh buttons, and on that first mount. The ticker only re-renders,
+        // so the 峰/谷 countdown stays honest without touching the network.
+        const ticker = window.setInterval(() => { publish({ now: Date.now() }) }, TICK_MS)
         return () => {
           live = false
-          window.clearInterval(timer)
           window.clearInterval(ticker)
-          window.removeEventListener('focus', onFocus)
         }
       }, [])
 
+      // A new session id means the numbers on screen belong to the previous
+      // conversation: refresh once, and only once per id.
+      const sessionId = sessionKeyOf(props)
+      const sessionSeen = React.useRef(sessionId)
+      React.useEffect(() => {
+        if (sessionSeen.current === sessionId) return undefined
+        sessionSeen.current = sessionId
+        void refreshNow()
+        return undefined
+      }, [sessionId])
+
+      const snapshot = state.snapshot
+      const failed = state.phase === 'failed'
+      const loading = state.phase === 'loading'
       const numbers = hasNumbers(snapshot)
       // Re-render on a short tick so the 峰/谷 countdown stays honest without
       // waiting for the next upstream poll.
-      const now = new Date()
+      const now = new Date(state.now)
       // 查询中… only while there is nothing numeric to show: once numbers exist
       // they stay on screen, refresh or not.
       const pending = !failed && !numbers
@@ -520,7 +1579,12 @@ window.__ModuleLoader__.load({
       const warn = !pending && (failed || (snapshot !== null && snapshot !== undefined
         && (snapshot.stale === true || error !== null
           || snapshot.cc?.ok === false || snapshot.deepseek?.ok === false)))
-      const title = warn ? `${text} · ${error ?? t('stale')}` : text
+      // The tooltip carries the age, and the upstream error when there is one:
+      // the row itself never nags about staleness.
+      const age = ageText(snapshot, t)
+      const title = [text, age, warn ? error : null]
+        .filter(part => part !== null && part !== undefined && part !== '')
+        .join(' · ')
 
       return h(React.Fragment, null,
         STYLE,
@@ -528,16 +1592,169 @@ window.__ModuleLoader__.load({
           className: 'dsh-quota-dock-root',
           'data-quota-dock': '',
           'data-warn': warn ? '' : undefined,
+          'data-open': state.panelOpen ? '' : undefined,
           title,
         },
+        h('button', {
+          type: 'button',
+          className: 'dsh-quota-dock-row',
+          'data-quota-row': '',
+          'aria-expanded': state.panelOpen ? 'true' : 'false',
+          'aria-haspopup': 'dialog',
+          title,
+          onClick: () => publish({ panelOpen: !store.panelOpen }),
+        },
         h('span', { className: 'dsh-quota-dock-strip' }, body),
-        warn ? h('span', { className: 'dsh-quota-dock-warn', 'aria-hidden': true }, '⚠') : null))
+        warn ? h('span', { className: 'dsh-quota-dock-warn', 'aria-hidden': true }, '⚠') : null)))
+    }
+
+    /**
+     * The money sheet, composed into the frame-wide `shell.overlay` slot. It
+     * renders nothing at all while closed, so it never leaves a layer that
+     * swallows clicks.
+     */
+    function QuotaSheet({ t }) {
+      const state = useStore()
+      const open = state.panelOpen
+      React.useEffect(() => {
+        if (!open || typeof window === 'undefined') return undefined
+        const onKey = event => { if (event.key === 'Escape') publish({ panelOpen: false }) }
+        window.addEventListener('keydown', onKey)
+        return () => { window.removeEventListener('keydown', onKey) }
+      }, [open])
+      if (!open) return null
+      return sheetTree({
+        t,
+        now: new Date(state.now),
+        snapshot: state.snapshot,
+        busy: state.busy === true,
+        onClose: () => publish({ panelOpen: false }),
+        onRefresh: () => { void refreshNow() },
+      })
+    }
+
+    /**
+     * The settings page, composed into `settings.section`. It is the only
+     * surface that reads or writes the platform list.
+     */
+    /**
+     * Settings: what is connected, how a new provider is added, and how often the
+     * numbers are re-read. The document comes from the Host, so the page and the
+     * row agree on the store path and the cadence.
+     */
+    function QuotaSettings({ t }) {
+      const store = useStore()
+      const [doc, setDoc] = React.useState(null)
+      const [busy, setBusy] = React.useState(false)
+      const [message, setMessage] = React.useState(null)
+      const [form, setForm] = React.useState({
+        preset: 'openrouter',
+        name: '',
+        kind: 'openrouter',
+        baseUrl: '',
+        apiKey: '',
+      })
+      const alive = React.useRef(true)
+
+      const read = () => {
+        setBusy(true)
+        setMessage(null)
+        fetchPlatforms().then(
+          body => {
+            if (alive.current !== true) return
+            setDoc(body)
+            setBusy(false)
+          },
+          error => {
+            if (alive.current !== true) return
+            setDoc({ platforms: [], refreshMs: REFRESH_CHOICES[1], storePath: null })
+            setBusy(false)
+            setMessage(messageOf(error))
+          }
+        )
+      }
+
+      React.useEffect(() => {
+        alive.current = true
+        read()
+        return () => { alive.current = false }
+      }, [])
+
+      const send = payload => {
+        setBusy(true)
+        setMessage(null)
+        return postPlatforms(payload).then(
+          body => {
+            if (alive.current === true) {
+              setDoc(body)
+              setBusy(false)
+            }
+            return true
+          },
+          error => {
+            if (alive.current === true) {
+              setBusy(false)
+              setMessage(messageOf(error))
+            }
+            return false
+          },
+        )
+      }
+
+      const submitAdd = () => {
+        const entry = form.kind === 'openrouter'
+          ? { action: 'add', name: 'OpenRouter', kind: 'openrouter', baseUrl: '', apiKey: form.apiKey }
+          : {
+              action: 'add',
+              name: form.name.trim() === '' ? t('presetCustom') : form.name,
+              kind: 'custom',
+              baseUrl: form.baseUrl,
+              apiKey: form.apiKey,
+            }
+        void send(entry).then(ok => {
+          if (ok !== true || alive.current !== true) return
+          // Keep the chosen preset; drop the secret and the one-off fields.
+          setForm(value => ({
+            ...value,
+            name: value.preset === 'custom' ? '' : value.name,
+            apiKey: '',
+          }))
+        })
+      }
+
+      // The sheet's figures and this page's header both come from the store, so
+      // one refresh updates them together.
+      const refreshAll = () => {
+        void refreshNow()
+        read()
+      }
+
+      return settingsTree({
+        t,
+        snapshot: store.snapshot,
+        platforms: doc === null ? null : doc.platforms,
+        refreshMs: doc?.refreshMs ?? REFRESH_CHOICES[1],
+        storePath: doc?.storePath ?? null,
+        form,
+        busy,
+        message,
+        onForm: patch => setForm(value => ({ ...value, ...patch })),
+        onAdd: submitAdd,
+        onRemove: id => { void send({ action: 'remove', id }) },
+        onRefresh: refreshAll,
+        onInterval: ms => { void send({ action: 'settings', refreshMs: ms }) },
+      })
     }
 
     return {
       inject: ['slots', 'locale'],
       apply(ctx) {
         ctx.effect(() => ctx.locale.register(NS, LOCALES), 'quota-dock: dictionaries')
+
+        // Label thunks are re-read on every projection, so the settings sidebar
+        // follows a live language switch without re-registering the slot.
+        const bound = typeof ctx.locale.bind === 'function' ? ctx.locale.bind(NS) : null
+        const label = key => () => (bound === null ? LOCALES.zh[key] : bound(key))
 
         // One refresh loop at a time, shared by the initial load, the 5-minute
         // tick, and the focus refresh, so they cannot pile up on each other.
@@ -551,6 +1768,7 @@ window.__ModuleLoader__.load({
           return pendingLoad
         }
 
+        // The always-visible row above the composer card.
         ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
           name: 'conversation.input.dock',
           id: 'quota-dock',
@@ -558,18 +1776,60 @@ window.__ModuleLoader__.load({
           locale: NS,
           inject: () => ({ load }),
         }, QuotaDock))
+
+        // The money sheet, on the frame-wide floating layer. That layer is
+        // click-through, so the sheet's own root opts back into pointer events.
+        ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+          name: 'shell.overlay',
+          id: 'quota-dock-sheet',
+          order: 60,
+          label: label('sheetTitle'),
+          locale: NS,
+        }, QuotaSheet))
+
+        // Platform configuration, beside the other settings entries.
+        ctx.slots.inject('settings.section', () => ctx.slots.register({
+          name: 'settings.section',
+          id: 'quota-dock',
+          order: 23,
+          label: label('settingsTitle'),
+          locale: NS,
+        }, QuotaSettings))
       },
       // Pure, DOM-free helpers, additionally exported so an offline smoke test can
       // drive them without a browser; the slot loader reads only inject/apply.
       LOCALES,
+      store,
+      publish,
+      useStore,
       formatStrip,
       hasNumbers,
       barPercent,
       barLevel,
+      percentText,
+      ratioText,
+      numText,
       cycleState,
       cycleText,
       durationText,
+      fmtClock,
+      fmtCountdown,
+      toMs,
+      sheetCards,
+      sheetTree,
+      settingsTree,
+      daysLeft,
+      daysText,
+      refreshNow,
+      ageText,
+      sessionKeyOf,
+      platformMoney,
+      renderBar,
+      renderPercent,
       renderCells,
+      QuotaDock,
+      QuotaSheet,
+      QuotaSettings,
     }
   },
 })
