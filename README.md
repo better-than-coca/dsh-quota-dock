@@ -6,6 +6,18 @@
 5h ▮▮▯▯▯ 6%   周 ▮▮▯▯▯ 14%   月 ▮▮▯▯▯ 12%  │  ▮▮▮▯ 谷时 · 全天谷价
 ```
 
+## 安装
+
+```bash
+dsh plugin add dsh-quota-dock
+```
+
+DSH 会把包内自带的 `cordis.patch.yml` 展开进你的 profile，不用手工改补丁。
+
+桌面版的 profile 由应用托管，本地开发时走的是 link：profile 的 `package.json` 里写 `"dsh-quota-dock": "link:E:/dsh/dsh-quota-dock"`，并把 `dsh-quota-dock` 登记进 `dsh.profile.bundles`。
+
+装完在 设置 → 额度与平台 里接入平台；内置的 Command Code 与 DeepSeek 只要环境里有 key 就会自己出现。
+
 ## 常显行
 
 - 常驻显示，不用点开，不在二级菜单里。
