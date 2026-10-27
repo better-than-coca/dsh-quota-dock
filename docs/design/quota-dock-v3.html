@@ -1,0 +1,530 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>quota-dock v0.5 · real CSS</title>
+<style>
+body { margin:0; font:13px/1.55 "Segoe UI","Microsoft YaHei UI",-apple-system,sans-serif; background:#0f1011; }
+.wrap { padding:22px; display:grid; gap:16px; }
+.pane { border-radius:12px; padding:18px 22px 24px; }
+.pane[data-t="light"] { background:#fff; color:#17181a; --dsw-alias-label-primary:#17181a; --dsw-alias-label-secondary:#5f6368; --dsw-alias-label-tertiary:#8a8f95; --dsw-alias-label-quaternary:#a0a4a9;
+     --dsw-alias-border-l1:rgb(17 17 17 / 8%); --dsw-alias-border-l2:rgb(17 17 17 / 12%); --dsw-alias-border-l3:rgb(17 17 17 / 18%);
+     --dsw-alias-fill-l1:rgb(17 17 17 / 5.5%); --dsw-alias-fill-l2:rgb(17 17 17 / 10%);
+     --dsw-alias-bg-l0:#fff; --dsw-alias-bg-l1:#fafafa; --dsw-alias-settings-card-fill:#f7f7f8; --dsw-alias-settings-card-stroke:rgb(17 17 17 / 8%);
+     --dsw-alias-brand-primary:#3d6fd6; --dsw-alias-button-primary-fill:#3d6fd6; --dsw-alias-label-primary-foreground:#fff;
+     --dsw-alias-interactive-bg-hover:rgb(17 17 17 / 5%); --dsw-focus-ring-color:#3d6fd6; }
+.pane[data-t="dark"]  { background:#17181a; color:#eceef0; --dsw-alias-label-primary:#eceef0; --dsw-alias-label-secondary:#a9aeb4; --dsw-alias-label-tertiary:#7f858c; --dsw-alias-label-quaternary:#6b7178;
+     --dsw-alias-border-l1:rgb(255 255 255 / 8%); --dsw-alias-border-l2:rgb(255 255 255 / 10%); --dsw-alias-border-l3:rgb(255 255 255 / 14%);
+     --dsw-alias-fill-l1:rgb(255 255 255 / 6%); --dsw-alias-fill-l2:rgb(255 255 255 / 10%);
+     --dsw-alias-bg-l0:#17181a; --dsw-alias-bg-l1:#1c1e21; --dsw-alias-settings-card-fill:#1e2023; --dsw-alias-settings-card-stroke:rgb(255 255 255 / 8%);
+     --dsw-alias-brand-primary:#6d9bff; --dsw-alias-button-primary-fill:#6d9bff; --dsw-alias-label-primary-foreground:#fff;
+     --dsw-alias-interactive-bg-hover:rgb(255 255 255 / 6%); --dsw-focus-ring-color:#6d9bff; }
+.lbl { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--dsw-alias-label-tertiary); margin:14px 0 10px; }
+.lbl:first-child { margin-top:0; }
+/* ---- token layer ----------------------------------------------------------
+   Components read --qd-*; --qd-* maps the host --dsw-* tokens so the surfaces
+   follow the skin, the theme and the density the rest of DSH uses.
+   The three state colours are ours, not the host's: the host palette is
+   green-500 #22c55e / amber-500 #f59e0b / red-500 #ef4444, which reads as a
+   warning light next to this type scale. These are the muted equivalents. */
+.dsh-quota-dock-root, .dsh-quota-dock-set, .dsh-quota-dock-sheet {
+  --qd-layer-0: var(--dsw-alias-bg-base, #fff);
+  --qd-layer-1: var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-l1, #fafafa));
+  --qd-layer-2: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-l1, #fff));
+  --qd-card-fill: var(--dsw-alias-settings-card-fill, var(--dsw-alias-bg-l1, #f7f7f8));
+  --qd-card-stroke: var(--dsw-alias-settings-card-stroke, var(--dsw-alias-border-l1, rgb(127 127 127 / 16%)));
+  --qd-border-1: var(--dsw-alias-border-l1, rgb(127 127 127 / 16%));
+  --qd-border-2: var(--dsw-alias-border-l2, rgb(127 127 127 / 28%));
+  --qd-border-3: var(--dsw-alias-border-l3, rgb(127 127 127 / 40%));
+  --qd-label-1: var(--dsw-alias-label-primary, #17181a);
+  --qd-label-2: var(--dsw-alias-label-secondary, #5f6368);
+  --qd-label-3: var(--dsw-alias-label-tertiary, #8a8a8a);
+  --qd-label-4: var(--dsw-alias-label-caption, var(--dsw-alias-label-quaternary, #a0a4a9));
+  --qd-brand: var(--dsw-alias-brand-primary, #3d6fd6);
+  --qd-success: #4f8d6c;
+  --qd-warn: #b9812f;
+  --qd-error: #c05a52;
+  --qd-idle: var(--dsw-alias-label-quaternary, #9aa0a6);
+  --qd-fill-1: var(--dsw-alias-fill-l1, rgb(127 127 127 / 8%));
+  --qd-fill-2: var(--dsw-alias-fill-l2, rgb(127 127 127 / 16%));
+  --qd-hover: var(--dsw-alias-interactive-bg-hover, rgb(127 127 127 / 8%));
+  --qd-focus: var(--dsw-focus-ring-color, var(--dsw-alias-brand-primary, #3d6fd6));
+  --qd-r-xs: var(--dsw-radius-xs, 4px);
+  --qd-r-sm: var(--dsw-radius-sm, 6px);
+  --qd-r-md: var(--dsw-radius-md, 8px);
+  --qd-r-lg: var(--dsw-radius-lg, 10px);
+  --qd-r-panel: var(--dsw-radius-panel, 12px);
+  --qd-elev: var(--dsw-elevation-prominent, 0 24px 64px -12px rgb(0 0 0 / 22%), 0 2px 8px rgb(0 0 0 / 6%));
+}
+/* ---- the row above the composer: three windows plus the DS cycle clock ---- */
+.dsh-quota-dock-root {
+  position: relative; display: inline-flex; align-items: center; width: 100%;
+  box-sizing: border-box; padding: 2px 2px 6px;
+  color: var(--qd-label-3);
+  font-size: 11.5px; line-height: 18px; font-variant-numeric: tabular-nums;
+}
+.dsh-quota-dock-row {
+  display: inline-flex; flex: 0 1 auto; min-width: 0; margin: 0 auto; justify-content: center; align-items: center;
+  gap: 8px; padding: 2px 10px; border: 0; border-radius: var(--qd-r-sm); background: transparent;
+  color: inherit; font: inherit; cursor: pointer;
+  transition: background-color 120ms ease-out;
+}
+.dsh-quota-dock-row:hover { background: var(--qd-hover); }
+.dsh-quota-dock-row:focus-visible { outline: 2px solid var(--qd-focus); outline-offset: 1px; }
+.dsh-quota-dock-strip {
+  display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px;
+  flex: 0 1 auto; min-width: 0;
+}
+.dsh-quota-dock-cell { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.dsh-quota-dock-label { color: var(--qd-label-3); font-weight: 500; }
+.dsh-quota-dock-pct { flex: none; color: var(--qd-label-2); font-weight: 500; font-variant-numeric: tabular-nums; }
+.dsh-quota-dock-pct[data-level="warn"] { color: var(--qd-warn); }
+.dsh-quota-dock-pct[data-level="high"] { color: var(--qd-error); }
+.dsh-quota-dock-pct[data-level="unknown"] { color: var(--qd-label-3); }
+.dsh-quota-dock-bar {
+  display: inline-block; flex: none; width: 44px; height: 5px; border-radius: 999px;
+  box-sizing: border-box; border: 0; background: var(--qd-fill-1); overflow: hidden;
+}
+.dsh-quota-dock-bar-fill {
+  display: block; height: 100%; border-radius: inherit;
+  background: var(--qd-success);
+  transition: width 150ms ease-out;
+}
+.dsh-quota-dock-bar[data-level="warn"] .dsh-quota-dock-bar-fill { background: var(--qd-warn); }
+.dsh-quota-dock-bar[data-level="high"] .dsh-quota-dock-bar-fill { background: var(--qd-error); }
+.dsh-quota-dock-bar[data-level="unknown"] .dsh-quota-dock-bar-fill { background: transparent; }
+.dsh-quota-dock-ds { display: inline-flex; align-items: center; gap: 10px; flex: none; }
+.dsh-quota-dock-divider { flex: none; width: 1px; height: 12px; margin: 0 4px; background: var(--qd-border-3); }
+.dsh-quota-dock-track {
+  position: relative; display: inline-flex; flex: none; width: 52px; height: 5px;
+  box-sizing: border-box; border: 0; border-radius: 999px; background: var(--qd-fill-1); overflow: hidden;
+}
+.dsh-quota-dock-track-peak { display: block; height: 100%; background: var(--qd-warn); }
+.dsh-quota-dock-track-off { display: block; height: 100%; background: var(--qd-brand); }
+.dsh-quota-dock-marker {
+  position: absolute; top: 0; bottom: 0; width: 1px; z-index: 1;
+  background: var(--qd-label-1); box-shadow: 0 0 0 1px var(--qd-layer-1);
+}
+.dsh-quota-dock-tier { font-weight: 500; }
+.dsh-quota-dock-until { color: var(--qd-label-3); }
+.dsh-quota-dock-root[data-warn] .dsh-quota-dock-strip { color: var(--qd-label-2); }
+.dsh-quota-dock-warn { flex: none; margin-left: 6px; color: var(--qd-warn); }
+/* ---- the sheet ---------------------------------------------------------- */
+.dsh-quota-dock-layer { position: fixed; inset: 0; z-index: 900; display: flex; align-items: center; justify-content: center; padding: 24px; pointer-events: none; }
+.dsh-quota-dock-sheet {
+  position: relative; margin: 0; pointer-events: auto; z-index: 900;
+  width: min(780px, 90vw); max-height: 78vh; overflow: auto; box-sizing: border-box;
+  border-radius: var(--qd-r-panel); background: var(--qd-layer-2);
+  border: 1px solid var(--qd-border-2);
+  box-shadow: var(--qd-elev); padding: 0;
+  color: var(--qd-label-1); font-size: 12.5px; line-height: 1.6;
+  animation: dsh-quota-sheet-in 180ms ease-out;
+}
+@keyframes dsh-quota-sheet-in {
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.dsh-quota-dock-sheet-head { display: flex; align-items: center; gap: 12px; padding: 12px 16px 11px; }
+.dsh-quota-dock-sheet-id { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.dsh-quota-dock-sheet-title { font-size: 12.5px; font-weight: 600; letter-spacing: .01em; }
+.dsh-quota-dock-sheet-age { color: var(--qd-label-4); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.dsh-quota-dock-chips { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.dsh-quota-dock-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 7px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 500; line-height: 16px;
+  color: var(--qd-label-2); background: var(--qd-fill-1);
+}
+.dsh-quota-dock-chip::before { content: ""; width: 5px; height: 5px; border-radius: 999px; background: var(--qd-idle); }
+.dsh-quota-dock-chip[data-state="ok"] { color: var(--qd-success); }
+.dsh-quota-dock-chip[data-state="ok"]::before { background: var(--qd-success); }
+.dsh-quota-dock-chip[data-state="bad"] { color: var(--qd-error); }
+.dsh-quota-dock-chip[data-state="bad"]::before { background: var(--qd-error); }
+.dsh-quota-dock-ghost { height: 26px; min-height: 26px; padding: 0 9px; cursor: pointer;
+  font: inherit; font-size: 11.5px; border: 1px solid var(--qd-border-2);
+  border-radius: var(--qd-r-sm); background: transparent; color: var(--qd-label-2);
+  transition: color 150ms ease-out, border-color 150ms ease-out, background-color 150ms ease-out; }
+.dsh-quota-dock-ghost:hover { color: var(--qd-label-1); background: var(--qd-hover); border-color: var(--qd-border-3); }
+.dsh-quota-dock-ghost:disabled { opacity: .5; cursor: default; }
+.dsh-quota-dock-sheet-close { box-sizing: border-box; width: 26px; height: 26px; flex: none;
+  border: 0; border-radius: var(--qd-r-sm); background: transparent; cursor: pointer;
+  color: var(--qd-label-3); font-size: 15px; line-height: 1;
+  transition: color 150ms ease-out, background-color 150ms ease-out; }
+.dsh-quota-dock-sheet-close:hover { color: var(--qd-label-1); background: var(--qd-hover); }
+.dsh-quota-dock-hero { display: flex; align-items: flex-end; gap: 28px; flex-wrap: wrap;
+  box-sizing: border-box; padding: 2px 16px 14px; font-variant-numeric: tabular-nums; }
+.dsh-quota-dock-hero-main { display: flex; flex-direction: column; gap: 1px; }
+.dsh-quota-dock-hero-label { font-size: 10.5px; letter-spacing: .02em; color: var(--qd-label-4); }
+.dsh-quota-dock-hero-value { font-size: 26px; font-weight: 600; line-height: 1.15; letter-spacing: -0.01em; }
+.dsh-quota-dock-stats { display: flex; gap: 22px; padding-bottom: 2px; flex-wrap: wrap; }
+.dsh-quota-dock-stat { display: flex; flex-direction: column; gap: 1px; }
+.dsh-quota-dock-stat-label { font-size: 10.5px; color: var(--qd-label-4); }
+.dsh-quota-dock-stat-value { font-size: 13px; font-weight: 600; color: var(--qd-label-2); }
+.dsh-quota-dock-rule { height: 1px; margin: 0 16px; background: var(--qd-border-2); }
+.dsh-quota-dock-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px 16px 14px; }
+.dsh-quota-dock-card { box-sizing: border-box; min-width: 0; padding: 11px 12px 10px;
+  align-self: start; background: var(--qd-card-fill);
+  border: 1px solid var(--qd-card-stroke); border-radius: var(--qd-r-lg); }
+.dsh-quota-dock-card-wide { grid-column: 1 / -1; }
+.dsh-quota-dock-card-head { display: flex; align-items: baseline; justify-content: space-between;
+  gap: 10px; margin-bottom: 3px; }
+.dsh-quota-dock-card-title { font-size: 12px; font-weight: 600; }
+.dsh-quota-dock-card-note { font-size: 10.5px; color: var(--qd-label-4); }
+.dsh-quota-dock-qrow { display: grid; grid-template-columns: 34px 108px 1fr 40px 84px;
+  align-items: center; gap: 10px; padding: 7px 0; min-width: 0; }
+.dsh-quota-dock-qrow + .dsh-quota-dock-qrow { border-top: 1px solid var(--qd-border-1); }
+.dsh-quota-dock-qk { font-size: 11.5px; color: var(--qd-label-2); }
+.dsh-quota-dock-qv { font-size: 12px; font-weight: 600; text-align: right;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.dsh-quota-dock-qrow .dsh-quota-dock-bar { width: auto; height: 4px; }
+.dsh-quota-dock-qrow .dsh-quota-dock-pct { font-size: 11.5px; font-weight: 600;
+  text-align: right; font-variant-numeric: tabular-nums; }
+.dsh-quota-dock-qr { font-size: 10.5px; text-align: right; white-space: nowrap;
+  color: var(--qd-label-4); font-variant-numeric: tabular-nums; }
+.dsh-quota-dock-detail { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px;
+  padding: 8px 0 1px 44px; font-size: 10.5px; line-height: 1.5; color: var(--qd-label-4); }
+.dsh-quota-dock-detail-sep { color: var(--qd-border-3); }
+.dsh-quota-dock-detail b { font-weight: 600; color: var(--qd-label-2); font-variant-numeric: tabular-nums; }
+.dsh-quota-dock-kv { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px;
+  align-items: center; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.dsh-quota-dock-kv-label { font-size: 11px; color: var(--qd-label-3); }
+.dsh-quota-dock-kv-value { font-size: 12px; font-weight: 600; text-align: right; white-space: nowrap; }
+.dsh-quota-dock-status { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px;
+  font-size: 11.5px; font-weight: 500; color: var(--qd-success); }
+.dsh-quota-dock-status i { width: 6px; height: 6px; flex: none; border-radius: 50%; background: currentColor; }
+.dsh-quota-dock-status[data-state="bad"] { color: var(--qd-error); }
+.dsh-quota-dock-note { margin: 9px 0 0; padding-top: 8px; font-size: 10.5px; line-height: 1.55;
+  color: var(--qd-label-4); border-top: 1px solid var(--qd-border-1); }
+.dsh-quota-dock-note b { font-weight: 600; color: var(--qd-label-2); }
+.dsh-quota-dock-note-solo { margin-top: 5px; padding-top: 0; border-top: 0; }
+.dsh-quota-dock-cur { margin-bottom: 3px; font-size: 10px; font-weight: 600;
+  letter-spacing: 0.06em; color: var(--qd-label-4); }
+.dsh-quota-dock-prow { display: flex; align-items: center; gap: 8px; min-height: 28px; min-width: 0; }
+.dsh-quota-dock-prow-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsh-quota-dock-prow-kind { flex: none; font-size: 10.5px; color: var(--qd-label-4); }
+.dsh-quota-dock-prow-money { flex: none; margin-left: auto; font-size: 12.5px; font-weight: 600;
+  font-variant-numeric: tabular-nums; }
+.dsh-quota-dock-empty { font-size: 11.5px; color: var(--qd-label-3); }
+.dsh-quota-dock-sheet-foot { display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 9px 16px 11px; font-size: 10.5px; color: var(--qd-label-3);
+  border-top: 1px solid var(--qd-border-2); background: var(--qd-fill-1); }
+/* ---- the settings page --------------------------------------------------- */
+.dsh-quota-dock-set { display: block; max-width: 600px;
+  color: var(--qd-label-1); font-size: 12.5px; line-height: 1.6; }
+.dsh-quota-dock-set-head { display: flex; align-items: center; gap: 12px; }
+.dsh-quota-dock-set-title { margin: 0; font-size: 14px; font-weight: 600; }
+.dsh-quota-dock-set-title + .dsh-quota-dock-ghost { margin-left: auto; }
+.dsh-quota-dock-set-hint { margin: 4px 0 14px; font-size: 11.5px; color: var(--qd-label-3); }
+.dsh-quota-dock-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px;
+  margin-bottom: 20px; background: var(--qd-border-1);
+  border: 1px solid var(--qd-border-1); border-radius: var(--qd-r-lg); overflow: hidden; }
+.dsh-quota-dock-sum { display: flex; flex-direction: column; gap: 1px; padding: 9px 12px;
+  background: var(--qd-card-fill); font-variant-numeric: tabular-nums; }
+.dsh-quota-dock-sum-value { font-size: 15px; font-weight: 600; line-height: 1.25; }
+.dsh-quota-dock-sum-label { font-size: 10.5px; color: var(--qd-label-4); }
+.dsh-quota-dock-sec { margin-bottom: 18px; }
+.dsh-quota-dock-sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.dsh-quota-dock-sec-title { margin: 0 0 7px; font-size: 11.5px; font-weight: 600;
+  color: var(--qd-label-2); letter-spacing: .01em; }
+.dsh-quota-dock-sec-aside { font-size: 10.5px; color: var(--qd-label-4); }
+.dsh-quota-dock-list { display: block; }
+.dsh-quota-dock-plat { display: flex; align-items: center; gap: 8px; min-height: 38px;
+  padding: 0 8px; border-radius: var(--qd-r-sm); transition: background-color 120ms ease-out; }
+.dsh-quota-dock-plat:hover { background: var(--qd-hover); }
+.dsh-quota-dock-dot { flex: none; width: 6px; height: 6px; border-radius: 999px; background: var(--qd-idle); }
+.dsh-quota-dock-dot[data-quota-dot="ok"] { background: var(--qd-success); }
+.dsh-quota-dock-dot[data-quota-dot="bad"] { background: var(--qd-error); }
+.dsh-quota-dock-pname { min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; font-size: 12.5px; font-weight: 600; }
+.dsh-quota-dock-badge { flex: none; padding: 1px 6px; border-radius: var(--qd-r-xs); font-size: 10.5px;
+  background: var(--qd-fill-1); color: var(--qd-label-3); }
+.dsh-quota-dock-pstate { flex: none; font-size: 10.5px; color: var(--qd-label-3); }
+.dsh-quota-dock-pstate[data-quota-state="ok"] { color: var(--qd-success); }
+.dsh-quota-dock-pstate[data-quota-state="bad"] { color: var(--qd-error); }
+.dsh-quota-dock-pmoney { flex: none; margin-left: auto; font-size: 12.5px; font-weight: 600;
+  font-variant-numeric: tabular-nums; }
+.dsh-quota-dock-remove { flex: none; min-height: 26px; padding: 0 7px; cursor: pointer;
+  font: inherit; font-size: 11px; border: 0; border-radius: var(--qd-r-sm); background: transparent;
+  color: var(--qd-label-3); transition: color 150ms ease-out, background-color 150ms ease-out; }
+.dsh-quota-dock-remove:hover { color: var(--qd-error); background: var(--qd-hover); }
+.dsh-quota-dock-form { margin-top: 4px; }
+.dsh-quota-dock-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.dsh-quota-dock-pill { min-height: 25px; padding: 0 10px; cursor: pointer; font: inherit;
+  font-size: 11.5px; border: 1px solid var(--qd-border-2); border-radius: 999px;
+  background: transparent; color: var(--qd-label-2);
+  transition: color 150ms ease-out, background-color 150ms ease-out, border-color 150ms ease-out; }
+.dsh-quota-dock-pill:hover { background: var(--qd-hover); }
+.dsh-quota-dock-pill[data-active] { border-color: var(--qd-border-3);
+  background: var(--qd-fill-1); color: var(--qd-label-1); font-weight: 500; }
+.dsh-quota-dock-field { display: block; margin-top: 10px; }
+.dsh-quota-dock-field-label { display: block; margin-bottom: 4px; font-size: 10.5px; color: var(--qd-label-3); }
+.dsh-quota-dock-field input { box-sizing: border-box; width: 100%; height: 32px; padding: 0 9px;
+  border: 1px solid var(--qd-border-2); border-radius: var(--qd-r-sm);
+  background: var(--qd-layer-2); color: inherit; font: inherit; font-size: 12.5px; }
+.dsh-quota-dock-submit { display: block; box-sizing: border-box; width: auto; height: 28px; min-height: 28px;
+  padding: 0 14px; margin-top: 14px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 500;
+  border: 0; border-radius: var(--qd-r-sm);
+  background: var(--dsw-alias-button-primary-fill, var(--qd-brand));
+  color: var(--dsw-alias-label-primary-foreground, #fff);
+  transition: opacity 150ms ease-out; }
+.dsh-quota-dock-submit:hover { opacity: .9; }
+.dsh-quota-dock-submit:disabled { opacity: .45; cursor: default; }
+.dsh-quota-dock-about { margin: 0; font-size: 11px; color: var(--qd-label-3); }
+.dsh-quota-dock-pmsg { margin-top: 12px; font-size: 11.5px; color: var(--qd-label-3); }
+.dsh-quota-dock-card-flat { padding: 2px 10px;
+  background: var(--qd-card-fill);
+  border: 1px solid var(--qd-card-stroke); border-radius: var(--qd-r-lg); }
+.dsh-quota-dock-brow { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+.dsh-quota-dock-brow + .dsh-quota-dock-brow { border-top: 1px solid var(--qd-border-1); }
+.dsh-quota-dock-brow-main { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.dsh-quota-dock-brow-text { min-width: 0; }
+.dsh-quota-dock-brow-name { font-size: 12.5px; font-weight: 500; }
+.dsh-quota-dock-brow-sub { margin-top: 1px; font-size: 10.5px; color: var(--qd-label-4);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.dsh-quota-dock-brow-value { font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dsh-quota-dock-brow-age { min-width: 54px; text-align: right; font-size: 10.5px; color: var(--qd-label-4); white-space: nowrap; }
+.dsh-quota-dock-mini { flex: none; width: 40px; height: 4px; border-radius: 999px;
+  background: var(--qd-fill-1); overflow: hidden; }
+.dsh-quota-dock-mini i { display: block; height: 100%; border-radius: inherit; background: var(--qd-success); }
+.dsh-quota-dock-empty-row { display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 12px; border: 1px dashed var(--qd-border-2); border-radius: var(--qd-r-lg); }
+.dsh-quota-dock-empty-title { font-size: 12px; }
+.dsh-quota-dock-empty-sub { margin-top: 3px; font-size: 11px; color: var(--qd-label-3); }
+.dsh-quota-dock-fixed { margin-top: 12px; }
+.dsh-quota-dock-hint { margin: 7px 0 0; font-size: 10.5px; line-height: 1.6; color: var(--qd-label-4); }
+.dsh-quota-dock-file { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px;
+  color: var(--qd-label-4); background: var(--qd-fill-1); padding: 1px 5px; border-radius: var(--qd-r-xs); }
+.dsh-quota-dock-form-actions { display: flex; justify-content: flex-start; gap: 8px; align-items: center; margin-top: 14px; }
+.dsh-quota-dock-form-actions .dsh-quota-dock-submit { width: auto; padding: 0 14px; margin-top: 0; }
+.dsh-quota-dock-prefs { border: 1px solid var(--qd-border-1); border-radius: var(--qd-r-lg);
+  padding: 2px 12px; background: var(--qd-card-fill); }
+.dsh-quota-dock-pref { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 38px; }
+.dsh-quota-dock-pref + .dsh-quota-dock-pref { border-top: 1px solid var(--qd-border-1); }
+.dsh-quota-dock-pref-label { font-size: 11.5px; color: var(--qd-label-2); }
+.dsh-quota-dock-pref-control { display: flex; align-items: center; gap: 10px; }
+.dsh-quota-dock-pref-value { font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--qd-label-3); }
+.dsh-quota-dock-select { height: 26px; padding: 0 8px; font: inherit; font-size: 11.5px;
+  border-radius: var(--qd-r-sm); border: 1px solid var(--qd-border-2);
+  background: var(--qd-layer-2); color: var(--qd-label-1); cursor: pointer; }
+.dsh-quota-dock-ghost-sm { min-height: 24px; height: 24px; padding: 0 8px; font-size: 11px; }
+.dsh-quota-dock-pill:focus-visible, .dsh-quota-dock-remove:focus-visible,
+.dsh-quota-dock-ghost:focus-visible, .dsh-quota-dock-sheet-close:focus-visible,
+.dsh-quota-dock-submit:focus-visible, .dsh-quota-dock-field input:focus-visible {
+  outline: 2px solid var(--qd-focus); outline-offset: 1px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dsh-quota-dock-sheet { animation: none; }
+  .dsh-quota-dock-bar-fill, .dsh-quota-dock-plat, .dsh-quota-dock-pill,
+  .dsh-quota-dock-ghost, .dsh-quota-dock-remove, .dsh-quota-dock-submit,
+  .dsh-quota-dock-sheet-close, .dsh-quota-dock-row { transition: none; }
+}
+/* harness only: the layer is fixed over the frame in production */
+.dsh-quota-dock-layer { position: static !important; inset: auto !important; padding: 0 !important; display: block !important; }
+.dsh-quota-dock-sheet { width: 100% !important; max-width: 780px; max-height: none !important; }
+</style></head><body><div class="wrap">
+<div class="pane" data-t="light"><div class="lbl">light · 设置页</div>
+<div class="dsh-quota-dock-set" data-quota-settings>
+  <div class="dsh-quota-dock-set-head"><h2 class="dsh-quota-dock-set-title">额度与平台</h2><button class="dsh-quota-dock-ghost">刷新</button></div>
+  <p class="dsh-quota-dock-set-hint">这里只管配置，金额看输入框上方那一行。</p>
+  <div class="dsh-quota-dock-summary">
+    <div class="dsh-quota-dock-sum"><span class="dsh-quota-dock-sum-value">2</span><span class="dsh-quota-dock-sum-label">已接入平台</span></div>
+    <div class="dsh-quota-dock-sum"><span class="dsh-quota-dock-sum-value">1</span><span class="dsh-quota-dock-sum-label">正常</span></div>
+    <div class="dsh-quota-dock-sum"><span class="dsh-quota-dock-sum-value">1</span><span class="dsh-quota-dock-sum-label">失败</span></div>
+    <div class="dsh-quota-dock-sum"><span class="dsh-quota-dock-sum-value">1 分钟</span><span class="dsh-quota-dock-sum-label">刷新间隔</span></div>
+  </div>
+  <section class="dsh-quota-dock-sec" data-quota-section="builtin">
+    <div class="dsh-quota-dock-sec-head"><h3 class="dsh-quota-dock-sec-title">内置平台</h3><span class="dsh-quota-dock-sec-aside">key 从环境变量读</span></div>
+    <div class="dsh-quota-dock-card-flat">
+      <div class="dsh-quota-dock-brow">
+        <div class="dsh-quota-dock-brow-main"><span class="dsh-quota-dock-dot" data-quota-dot="ok"></span><div class="dsh-quota-dock-brow-text"><div class="dsh-quota-dock-brow-name">Command Code</div><div class="dsh-quota-dock-brow-sub">COMMANDCODE_API_KEY</div></div></div>
+        <span class="dsh-quota-dock-mini"><i style="width:12%"></i></span>
+        <span class="dsh-quota-dock-brow-value">月 12%</span>
+        <span class="dsh-quota-dock-brow-age">12 秒前</span>
+        <button class="dsh-quota-dock-ghost dsh-quota-dock-ghost-sm">刷新</button>
+      </div>
+      <div class="dsh-quota-dock-brow">
+        <div class="dsh-quota-dock-brow-main"><span class="dsh-quota-dock-dot" data-quota-dot="ok"></span><div class="dsh-quota-dock-brow-text"><div class="dsh-quota-dock-brow-name">DeepSeek</div><div class="dsh-quota-dock-brow-sub">DEEPSEEK_API_KEY</div></div></div>
+        <span class="dsh-quota-dock-brow-value">¥39.62</span>
+        <span class="dsh-quota-dock-brow-age">12 秒前</span>
+        <button class="dsh-quota-dock-ghost dsh-quota-dock-ghost-sm">刷新</button>
+      </div>
+    </div>
+  </section>
+  <section class="dsh-quota-dock-sec" data-quota-section="platforms">
+    <div class="dsh-quota-dock-sec-head"><h3 class="dsh-quota-dock-sec-title">已接入平台</h3><span class="dsh-quota-dock-sec-aside">2</span></div>
+    <div class="dsh-quota-dock-list">
+      <div class="dsh-quota-dock-plat"><span class="dsh-quota-dock-dot" data-quota-dot="ok"></span><div class="dsh-quota-dock-brow-text"><div class="dsh-quota-dock-brow-name">OpenRouter</div><div class="dsh-quota-dock-brow-sub">openrouter · https://openrouter.ai/api/v1/credits</div></div><span class="dsh-quota-dock-pstate" data-quota-state="ok">正常</span><span class="dsh-quota-dock-pmoney">USD 42.10</span><button class="dsh-quota-dock-remove">删除</button></div>
+      <div class="dsh-quota-dock-plat"><span class="dsh-quota-dock-dot" data-quota-dot="bad"></span><div class="dsh-quota-dock-brow-text"><div class="dsh-quota-dock-brow-name">硅基流动</div><div class="dsh-quota-dock-brow-sub">custom · https://api.siliconflow.cn/v1/user/info</div></div><span class="dsh-quota-dock-pstate" data-quota-state="bad">失败</span><span class="dsh-quota-dock-pmoney">—</span><button class="dsh-quota-dock-remove">删除</button></div>
+    </div>
+  </section>
+  <section class="dsh-quota-dock-sec" data-quota-section="add">
+    <div class="dsh-quota-dock-sec-head"><h3 class="dsh-quota-dock-sec-title">接入新平台</h3><span class="dsh-quota-dock-sec-aside">选预设可省掉填地址</span></div>
+    <div class="dsh-quota-dock-pills">
+      <button class="dsh-quota-dock-pill">OpenRouter</button><button class="dsh-quota-dock-pill" data-active>LiteLLM</button><button class="dsh-quota-dock-pill">New API</button><button class="dsh-quota-dock-pill">硅基流动</button><button class="dsh-quota-dock-pill">Kimi</button><button class="dsh-quota-dock-pill">自定义</button>
+    </div>
+    <label class="dsh-quota-dock-field"><span class="dsh-quota-dock-field-label">名称</span><input value="LiteLLM"></label>
+    <label class="dsh-quota-dock-field"><span class="dsh-quota-dock-field-label">接口地址</span><input placeholder="https://…"></label>
+    <label class="dsh-quota-dock-field"><span class="dsh-quota-dock-field-label">API key</span><input type="password" value="sk-demo"></label>
+    <p class="dsh-quota-dock-hint">任何返回 JSON 的余额接口都能接：Host 会把最多 50 个数字字段平铺成行。</p>
+    <div class="dsh-quota-dock-form-actions"><button class="dsh-quota-dock-submit">添加</button></div>
+  </section>
+  <section class="dsh-quota-dock-sec" data-quota-section="data">
+    <div class="dsh-quota-dock-sec-head"><h3 class="dsh-quota-dock-sec-title">数据与刷新</h3></div>
+    <div class="dsh-quota-dock-prefs">
+      <div class="dsh-quota-dock-pref"><span class="dsh-quota-dock-pref-label">刷新间隔</span><div class="dsh-quota-dock-pref-control"><select class="dsh-quota-dock-select"><option>1 分钟</option></select><button class="dsh-quota-dock-ghost dsh-quota-dock-ghost-sm">立即刷新</button></div></div>
+      <div class="dsh-quota-dock-pref"><span class="dsh-quota-dock-pref-label">最近刷新</span><div class="dsh-quota-dock-pref-control"><span class="dsh-quota-dock-pref-value">12 秒前</span></div></div>
+      <div class="dsh-quota-dock-pref"><span class="dsh-quota-dock-pref-label">配置文件</span><div class="dsh-quota-dock-pref-control"><code class="dsh-quota-dock-file">…\platforms.json</code></div></div>
+    </div>
+  </section>
+</div><div class="lbl">light · 输入框上方那一行</div>
+<div class="dsh-quota-dock-root" data-quota-dock>
+  <button class="dsh-quota-dock-row" data-quota-row aria-expanded="false">
+    <span class="dsh-quota-dock-strip">
+      <span class="dsh-quota-dock-cell"><span class="dsh-quota-dock-label">5h </span><span class="dsh-quota-dock-bar" data-quota-bar data-level="" data-quota-fill="6" role="img"><span class="dsh-quota-dock-bar-fill" style="width:6%"></span></span><span class="dsh-quota-dock-pct" data-level="">6%</span></span>
+      <span class="dsh-quota-dock-cell"><span class="dsh-quota-dock-label"> 周 </span><span class="dsh-quota-dock-bar" data-quota-bar data-level="" data-quota-fill="14" role="img"><span class="dsh-quota-dock-bar-fill" style="width:14%"></span></span><span class="dsh-quota-dock-pct" data-level="">14%</span></span>
+      <span class="dsh-quota-dock-cell"><span class="dsh-quota-dock-label"> 月 </span><span class="dsh-quota-dock-bar" data-quota-bar data-level="" data-quota-fill="12" role="img"><span class="dsh-quota-dock-bar-fill" style="width:12%"></span></span><span class="dsh-quota-dock-pct" data-level="">12%</span></span>
+      <span class="dsh-quota-dock-ds"><span class="dsh-quota-dock-divider"></span><span class="dsh-quota-dock-ds-num"> <span class="dsh-quota-dock-track" data-quota-cycle="peak"><span class="dsh-quota-dock-track-peak" style="width:38%"></span><span class="dsh-quota-dock-track-off" style="width:62%"></span><span class="dsh-quota-dock-marker" style="left:38%"></span></span><span class="dsh-quota-dock-tier">峰时 · </span><span class="dsh-quota-dock-until">距谷 15h30m</span></span></span>
+    </span>
+  </button>
+</div><div class="lbl">light · 详情弹层</div>
+<div class="dsh-quota-dock-layer" data-quota-sheet>
+  <div class="dsh-quota-dock-sheet" role="dialog" aria-modal="true" aria-label="额度与余额">
+    <div class="dsh-quota-dock-sheet-head">
+      <div class="dsh-quota-dock-sheet-id"><span class="dsh-quota-dock-sheet-title">额度与余额</span><span class="dsh-quota-dock-sheet-age">12 秒前</span></div>
+      <div class="dsh-quota-dock-chips"><span class="dsh-quota-dock-chip" data-state="ok">CC 正常</span><span class="dsh-quota-dock-chip" data-state="ok">DS 正常</span></div>
+      <button class="dsh-quota-dock-ghost">刷新</button>
+      <button class="dsh-quota-dock-sheet-close">×</button>
+    </div>
+    <div class="dsh-quota-dock-hero" data-quota-card="overview">
+      <div class="dsh-quota-dock-hero-main"><span class="dsh-quota-dock-hero-label">本月剩余</span><span class="dsh-quota-dock-hero-value">$61.77</span></div>
+      <div class="dsh-quota-dock-stats">
+        <div class="dsh-quota-dock-stat"><span class="dsh-quota-dock-stat-label">本月已用</span><span class="dsh-quota-dock-stat-value">$8.20</span></div>
+        <div class="dsh-quota-dock-stat"><span class="dsh-quota-dock-stat-label">还能用</span><span class="dsh-quota-dock-stat-value">12 天</span></div>
+        <div class="dsh-quota-dock-stat"><span class="dsh-quota-dock-stat-label">月度已用</span><span class="dsh-quota-dock-stat-value">12%</span></div>
+      </div>
+    </div>
+    <div class="dsh-quota-dock-rule"></div>
+    <div class="dsh-quota-dock-grid">
+      <section class="dsh-quota-dock-card dsh-quota-dock-card-wide" data-quota-card="cc">
+        <div class="dsh-quota-dock-card-head"><span class="dsh-quota-dock-card-title">Command Code</span><span class="dsh-quota-dock-card-note">重置时间按本地时区</span></div>
+        <div class="dsh-quota-dock-qrow" data-quota-window="5h"><span class="dsh-quota-dock-qk">5h</span><span class="dsh-quota-dock-qv">$5.84 / $100</span><span class="dsh-quota-dock-bar" data-quota-bar data-level="" data-quota-fill="6" role="img"><span class="dsh-quota-dock-bar-fill" style="width:6%"></span></span><span class="dsh-quota-dock-pct" data-level="">6%</span><span class="dsh-quota-dock-qr">1h30m 后重置</span></div>
+        <div class="dsh-quota-dock-qrow" data-quota-window="周"><span class="dsh-quota-dock-qk">周</span><span class="dsh-quota-dock-qv">$14 / $100</span><span class="dsh-quota-dock-bar" data-quota-bar data-level="" data-quota-fill="14" role="img"><span class="dsh-quota-dock-bar-fill" style="width:14%"></span></span><span class="dsh-quota-dock-pct" data-level="">14%</span><span class="dsh-quota-dock-qr">3 天后重置</span></div>
+        <div class="dsh-quota-dock-qrow" data-quota-window="月"><span class="dsh-quota-dock-qk">月</span><span class="dsh-quota-dock-qv">$8.2 / $70</span><span class="dsh-quota-dock-bar" data-quota-bar data-level="" data-quota-fill="12" role="img"><span class="dsh-quota-dock-bar-fill" style="width:12%"></span></span><span class="dsh-quota-dock-pct" data-level="">12%</span><span class="dsh-quota-dock-qr">11-01 00:00</span></div>
+        <div class="dsh-quota-dock-detail"><span class="dsh-quota-dock-detail-cell">月度已用 <b>$8.20</b></span><span class="dsh-quota-dock-detail-sep">·</span><span class="dsh-quota-dock-detail-cell">月度剩余 <b>$61.77</b></span><span class="dsh-quota-dock-detail-sep">·</span><span class="dsh-quota-dock-detail-cell">月度总额 <b>$70</b></span><span class="dsh-quota-dock-detail-sep">·</span><span class="dsh-quota-dock-detail-cell">订阅 <b>pro</b></span></div>
+      </section>
+      <section class="dsh-quota-dock-card" data-quota-card="deepseek">
+        <div class="dsh-quota-dock-card-head"><span class="dsh-quota-dock-card-title">DeepSeek</span><span class="dsh-quota-dock-card-note">CNY</span></div>
+        <div class="dsh-quota-dock-kv"><span class="dsh-quota-dock-kv-label">总额</span><span class="dsh-quota-dock-kv-value">¥39.62</span><span class="dsh-quota-dock-kv-label">赠送</span><span class="dsh-quota-dock-kv-value">¥5.00</span><span class="dsh-quota-dock-kv-label">充值</span><span class="dsh-quota-dock-kv-value">¥34.62</span></div>
+        <div class="dsh-quota-dock-kv"><span class="dsh-quota-dock-kv-label">可用</span><span class="dsh-quota-dock-status" data-state="ok"><i></i>正常</span></div>
+        <p class="dsh-quota-dock-note">谷 00:30–08:30（周末全天谷价）</p>
+      </section>
+      <section class="dsh-quota-dock-card" data-quota-card="platforms">
+        <div class="dsh-quota-dock-card-head"><span class="dsh-quota-dock-card-title">其他平台</span></div>
+        <div class="dsh-quota-dock-prow"><span class="dsh-quota-dock-prow-name">OpenRouter</span><span class="dsh-quota-dock-prow-kind">openrouter</span><span class="dsh-quota-dock-prow-money">USD 42.10</span></div>
+        <p class="dsh-quota-dock-note">其他平台 · 1</p>
+      </section>
+    </div>
+    <div class="dsh-quota-dock-sheet-foot"><span>每 1 分钟自动重取一次</span><span>平台接入在 设置 → 额度与平台</span></div>
+  </div>
+</div></div><div class="pane" data-t="dark"><div class="lbl">dark · 设置页</div>
+<div class="dsh-quota-dock-set" data-quota-settings>
+  <div class="dsh-quota-dock-set-head"><h2 class="dsh-quota-dock-set-title">额度与平台</h2><button class="dsh-quota-dock-ghost">刷新</button></div>
+  <p class="dsh-quota-dock-set-hint">这里只管配置，金额看输入框上方那一行。</p>
+  <div class="dsh-quota-dock-summary">
+    <div class="dsh-quota-dock-sum"><span class="dsh-quota-dock-sum-value">2</span><span class="dsh-quota-dock-sum-label">已接入平台</span></div>
+    <div class="dsh-quota-dock-sum"><span class="dsh-quota-dock-sum-value">1</span><span class="dsh-quota-dock-sum-label">正常</span></div>
+    <div class="dsh-quota-dock-sum"><span class="dsh-quota-dock-sum-value">1</span><span class="dsh-quota-dock-sum-label">失败</span></div>
+    <div class="dsh-quota-dock-sum"><span class="dsh-quota-dock-sum-value">1 分钟</span><span class="dsh-quota-dock-sum-label">刷新间隔</span></div>
+  </div>
+  <section class="dsh-quota-dock-sec" data-quota-section="builtin">
+    <div class="dsh-quota-dock-sec-head"><h3 class="dsh-quota-dock-sec-title">内置平台</h3><span class="dsh-quota-dock-sec-aside">key 从环境变量读</span></div>
+    <div class="dsh-quota-dock-card-flat">
+      <div class="dsh-quota-dock-brow">
+        <div class="dsh-quota-dock-brow-main"><span class="dsh-quota-dock-dot" data-quota-dot="ok"></span><div class="dsh-quota-dock-brow-text"><div class="dsh-quota-dock-brow-name">Command Code</div><div class="dsh-quota-dock-brow-sub">COMMANDCODE_API_KEY</div></div></div>
+        <span class="dsh-quota-dock-mini"><i style="width:12%"></i></span>
+        <span class="dsh-quota-dock-brow-value">月 12%</span>
+        <span class="dsh-quota-dock-brow-age">12 秒前</span>
+        <button class="dsh-quota-dock-ghost dsh-quota-dock-ghost-sm">刷新</button>
+      </div>
+      <div class="dsh-quota-dock-brow">
+        <div class="dsh-quota-dock-brow-main"><span class="dsh-quota-dock-dot" data-quota-dot="ok"></span><div class="dsh-quota-dock-brow-text"><div class="dsh-quota-dock-brow-name">DeepSeek</div><div class="dsh-quota-dock-brow-sub">DEEPSEEK_API_KEY</div></div></div>
+        <span class="dsh-quota-dock-brow-value">¥39.62</span>
+        <span class="dsh-quota-dock-brow-age">12 秒前</span>
+        <button class="dsh-quota-dock-ghost dsh-quota-dock-ghost-sm">刷新</button>
+      </div>
+    </div>
+  </section>
+  <section class="dsh-quota-dock-sec" data-quota-section="platforms">
+    <div class="dsh-quota-dock-sec-head"><h3 class="dsh-quota-dock-sec-title">已接入平台</h3><span class="dsh-quota-dock-sec-aside">2</span></div>
+    <div class="dsh-quota-dock-list">
+      <div class="dsh-quota-dock-plat"><span class="dsh-quota-dock-dot" data-quota-dot="ok"></span><div class="dsh-quota-dock-brow-text"><div class="dsh-quota-dock-brow-name">OpenRouter</div><div class="dsh-quota-dock-brow-sub">openrouter · https://openrouter.ai/api/v1/credits</div></div><span class="dsh-quota-dock-pstate" data-quota-state="ok">正常</span><span class="dsh-quota-dock-pmoney">USD 42.10</span><button class="dsh-quota-dock-remove">删除</button></div>
+      <div class="dsh-quota-dock-plat"><span class="dsh-quota-dock-dot" data-quota-dot="bad"></span><div class="dsh-quota-dock-brow-text"><div class="dsh-quota-dock-brow-name">硅基流动</div><div class="dsh-quota-dock-brow-sub">custom · https://api.siliconflow.cn/v1/user/info</div></div><span class="dsh-quota-dock-pstate" data-quota-state="bad">失败</span><span class="dsh-quota-dock-pmoney">—</span><button class="dsh-quota-dock-remove">删除</button></div>
+    </div>
+  </section>
+  <section class="dsh-quota-dock-sec" data-quota-section="add">
+    <div class="dsh-quota-dock-sec-head"><h3 class="dsh-quota-dock-sec-title">接入新平台</h3><span class="dsh-quota-dock-sec-aside">选预设可省掉填地址</span></div>
+    <div class="dsh-quota-dock-pills">
+      <button class="dsh-quota-dock-pill">OpenRouter</button><button class="dsh-quota-dock-pill" data-active>LiteLLM</button><button class="dsh-quota-dock-pill">New API</button><button class="dsh-quota-dock-pill">硅基流动</button><button class="dsh-quota-dock-pill">Kimi</button><button class="dsh-quota-dock-pill">自定义</button>
+    </div>
+    <label class="dsh-quota-dock-field"><span class="dsh-quota-dock-field-label">名称</span><input value="LiteLLM"></label>
+    <label class="dsh-quota-dock-field"><span class="dsh-quota-dock-field-label">接口地址</span><input placeholder="https://…"></label>
+    <label class="dsh-quota-dock-field"><span class="dsh-quota-dock-field-label">API key</span><input type="password" value="sk-demo"></label>
+    <p class="dsh-quota-dock-hint">任何返回 JSON 的余额接口都能接：Host 会把最多 50 个数字字段平铺成行。</p>
+    <div class="dsh-quota-dock-form-actions"><button class="dsh-quota-dock-submit">添加</button></div>
+  </section>
+  <section class="dsh-quota-dock-sec" data-quota-section="data">
+    <div class="dsh-quota-dock-sec-head"><h3 class="dsh-quota-dock-sec-title">数据与刷新</h3></div>
+    <div class="dsh-quota-dock-prefs">
+      <div class="dsh-quota-dock-pref"><span class="dsh-quota-dock-pref-label">刷新间隔</span><div class="dsh-quota-dock-pref-control"><select class="dsh-quota-dock-select"><option>1 分钟</option></select><button class="dsh-quota-dock-ghost dsh-quota-dock-ghost-sm">立即刷新</button></div></div>
+      <div class="dsh-quota-dock-pref"><span class="dsh-quota-dock-pref-label">最近刷新</span><div class="dsh-quota-dock-pref-control"><span class="dsh-quota-dock-pref-value">12 秒前</span></div></div>
+      <div class="dsh-quota-dock-pref"><span class="dsh-quota-dock-pref-label">配置文件</span><div class="dsh-quota-dock-pref-control"><code class="dsh-quota-dock-file">…\platforms.json</code></div></div>
+    </div>
+  </section>
+</div><div class="lbl">dark · 输入框上方那一行</div>
+<div class="dsh-quota-dock-root" data-quota-dock>
+  <button class="dsh-quota-dock-row" data-quota-row aria-expanded="false">
+    <span class="dsh-quota-dock-strip">
+      <span class="dsh-quota-dock-cell"><span class="dsh-quota-dock-label">5h </span><span class="dsh-quota-dock-bar" data-quota-bar data-level="" data-quota-fill="6" role="img"><span class="dsh-quota-dock-bar-fill" style="width:6%"></span></span><span class="dsh-quota-dock-pct" data-level="">6%</span></span>
+      <span class="dsh-quota-dock-cell"><span class="dsh-quota-dock-label"> 周 </span><span class="dsh-quota-dock-bar" data-quota-bar data-level="" data-quota-fill="14" role="img"><span class="dsh-quota-dock-bar-fill" style="width:14%"></span></span><span class="dsh-quota-dock-pct" data-level="">14%</span></span>
+      <span class="dsh-quota-dock-cell"><span class="dsh-quota-dock-label"> 月 </span><span class="dsh-quota-dock-bar" data-quota-bar data-level="" data-quota-fill="12" role="img"><span class="dsh-quota-dock-bar-fill" style="width:12%"></span></span><span class="dsh-quota-dock-pct" data-level="">12%</span></span>
+      <span class="dsh-quota-dock-ds"><span class="dsh-quota-dock-divider"></span><span class="dsh-quota-dock-ds-num"> <span class="dsh-quota-dock-track" data-quota-cycle="peak"><span class="dsh-quota-dock-track-peak" style="width:38%"></span><span class="dsh-quota-dock-track-off" style="width:62%"></span><span class="dsh-quota-dock-marker" style="left:38%"></span></span><span class="dsh-quota-dock-tier">峰时 · </span><span class="dsh-quota-dock-until">距谷 15h30m</span></span></span>
+    </span>
+  </button>
+</div><div class="lbl">dark · 详情弹层</div>
+<div class="dsh-quota-dock-layer" data-quota-sheet>
+  <div class="dsh-quota-dock-sheet" role="dialog" aria-modal="true" aria-label="额度与余额">
+    <div class="dsh-quota-dock-sheet-head">
+      <div class="dsh-quota-dock-sheet-id"><span class="dsh-quota-dock-sheet-title">额度与余额</span><span class="dsh-quota-dock-sheet-age">12 秒前</span></div>
+      <div class="dsh-quota-dock-chips"><span class="dsh-quota-dock-chip" data-state="ok">CC 正常</span><span class="dsh-quota-dock-chip" data-state="ok">DS 正常</span></div>
+      <button class="dsh-quota-dock-ghost">刷新</button>
+      <button class="dsh-quota-dock-sheet-close">×</button>
+    </div>
+    <div class="dsh-quota-dock-hero" data-quota-card="overview">
+      <div class="dsh-quota-dock-hero-main"><span class="dsh-quota-dock-hero-label">本月剩余</span><span class="dsh-quota-dock-hero-value">$61.77</span></div>
+      <div class="dsh-quota-dock-stats">
+        <div class="dsh-quota-dock-stat"><span class="dsh-quota-dock-stat-label">本月已用</span><span class="dsh-quota-dock-stat-value">$8.20</span></div>
+        <div class="dsh-quota-dock-stat"><span class="dsh-quota-dock-stat-label">还能用</span><span class="dsh-quota-dock-stat-value">12 天</span></div>
+        <div class="dsh-quota-dock-stat"><span class="dsh-quota-dock-stat-label">月度已用</span><span class="dsh-quota-dock-stat-value">12%</span></div>
+      </div>
+    </div>
+    <div class="dsh-quota-dock-rule"></div>
+    <div class="dsh-quota-dock-grid">
+      <section class="dsh-quota-dock-card dsh-quota-dock-card-wide" data-quota-card="cc">
+        <div class="dsh-quota-dock-card-head"><span class="dsh-quota-dock-card-title">Command Code</span><span class="dsh-quota-dock-card-note">重置时间按本地时区</span></div>
+        <div class="dsh-quota-dock-qrow" data-quota-window="5h"><span class="dsh-quota-dock-qk">5h</span><span class="dsh-quota-dock-qv">$5.84 / $100</span><span class="dsh-quota-dock-bar" data-quota-bar data-level="" data-quota-fill="6" role="img"><span class="dsh-quota-dock-bar-fill" style="width:6%"></span></span><span class="dsh-quota-dock-pct" data-level="">6%</span><span class="dsh-quota-dock-qr">1h30m 后重置</span></div>
+        <div class="dsh-quota-dock-qrow" data-quota-window="周"><span class="dsh-quota-dock-qk">周</span><span class="dsh-quota-dock-qv">$14 / $100</span><span class="dsh-quota-dock-bar" data-quota-bar data-level="" data-quota-fill="14" role="img"><span class="dsh-quota-dock-bar-fill" style="width:14%"></span></span><span class="dsh-quota-dock-pct" data-level="">14%</span><span class="dsh-quota-dock-qr">3 天后重置</span></div>
+        <div class="dsh-quota-dock-qrow" data-quota-window="月"><span class="dsh-quota-dock-qk">月</span><span class="dsh-quota-dock-qv">$8.2 / $70</span><span class="dsh-quota-dock-bar" data-quota-bar data-level="" data-quota-fill="12" role="img"><span class="dsh-quota-dock-bar-fill" style="width:12%"></span></span><span class="dsh-quota-dock-pct" data-level="">12%</span><span class="dsh-quota-dock-qr">11-01 00:00</span></div>
+        <div class="dsh-quota-dock-detail"><span class="dsh-quota-dock-detail-cell">月度已用 <b>$8.20</b></span><span class="dsh-quota-dock-detail-sep">·</span><span class="dsh-quota-dock-detail-cell">月度剩余 <b>$61.77</b></span><span class="dsh-quota-dock-detail-sep">·</span><span class="dsh-quota-dock-detail-cell">月度总额 <b>$70</b></span><span class="dsh-quota-dock-detail-sep">·</span><span class="dsh-quota-dock-detail-cell">订阅 <b>pro</b></span></div>
+      </section>
+      <section class="dsh-quota-dock-card" data-quota-card="deepseek">
+        <div class="dsh-quota-dock-card-head"><span class="dsh-quota-dock-card-title">DeepSeek</span><span class="dsh-quota-dock-card-note">CNY</span></div>
+        <div class="dsh-quota-dock-kv"><span class="dsh-quota-dock-kv-label">总额</span><span class="dsh-quota-dock-kv-value">¥39.62</span><span class="dsh-quota-dock-kv-label">赠送</span><span class="dsh-quota-dock-kv-value">¥5.00</span><span class="dsh-quota-dock-kv-label">充值</span><span class="dsh-quota-dock-kv-value">¥34.62</span></div>
+        <div class="dsh-quota-dock-kv"><span class="dsh-quota-dock-kv-label">可用</span><span class="dsh-quota-dock-status" data-state="ok"><i></i>正常</span></div>
+        <p class="dsh-quota-dock-note">谷 00:30–08:30（周末全天谷价）</p>
+      </section>
+      <section class="dsh-quota-dock-card" data-quota-card="platforms">
+        <div class="dsh-quota-dock-card-head"><span class="dsh-quota-dock-card-title">其他平台</span></div>
+        <div class="dsh-quota-dock-prow"><span class="dsh-quota-dock-prow-name">OpenRouter</span><span class="dsh-quota-dock-prow-kind">openrouter</span><span class="dsh-quota-dock-prow-money">USD 42.10</span></div>
+        <p class="dsh-quota-dock-note">其他平台 · 1</p>
+      </section>
+    </div>
+    <div class="dsh-quota-dock-sheet-foot"><span>每 1 分钟自动重取一次</span><span>平台接入在 设置 → 额度与平台</span></div>
+  </div>
+</div></div>
+</div></body></html>

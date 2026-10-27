@@ -1030,7 +1030,11 @@ export function apply(ctx) {
    */
   function snapshot() {
     const age = ageMs()
-    const expired = state.fetchedAt !== null && (age === null || age > storeRefreshMs)
+    // A read that lands at the TTL boundary is exactly what starts the next
+    // cycle, so the crossing itself is not a data problem. Only a cache that is
+    // still old once nothing is in flight — a failed or stuck cycle — is stale.
+    const overdue = age === null || age > storeRefreshMs
+    const expired = state.fetchedAt !== null && overdue && state.fetching === false
     // A platform serving its last-good fields counts as stale, but never raises
     // the snapshot's own error: platforms report through their own ok/error.
     const platformsStale = state.platforms.some((platform) => platform.ok === false && platform.fields.length > 0)
@@ -1041,8 +1045,10 @@ export function apply(ctx) {
       // The cadence the sheet's footer prints, so the panel and the settings page
       // can never disagree about how often the numbers are re-read.
       refreshMs: storeRefreshMs,
-      // Showing old data when the cache expired, the last cycle failed, or a
-      // provider is serving its last-good copy.
+      // Showing old data when the cache expired with nothing left to fix it, the
+      // last cycle failed, or a provider is serving its last-good copy. The row
+      // reads once per `refreshMs`, and that read is what starts the cycle, so a
+      // normal in-flight refresh must not raise the flag.
       stale: state.fetchedAt === null
         ? false
         : (expired || state.error !== null || state.cc.stale || state.deepseek.stale || platformsStale),

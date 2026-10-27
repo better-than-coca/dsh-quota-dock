@@ -31,8 +31,8 @@
 ```
 
 - `fetchedAt` = 最近一次**成功**上游读取的 ms 时间戳；从未成功过则 `null`。
-- `stale` = 正在展示的是旧数据（超过 TTL 或上次刷新失败）。
-- `fetching` = 当前是否有刷新在飞（用于客户端显示「查询中…」）。
+- `stale` = 正在展示的是旧数据：缓存超过 TTL **且没有刷新在飞**，或上次刷新失败。读到 TTL 边界本身就是下一轮刷新的触发点，所以「刚好过期 + `fetching:true`」不算旧数据——客户端据此跟着这轮刷新，而不是先闪一下警告；客户端另有一道保险：`stale && fetching` 时同样不亮标记，`error` / `cc.ok` / `deepseek.ok` 的失败态不受这道保险影响。
+- `fetching` = 当前是否有刷新在飞。客户端在 `true` 时以更短的间隔连读，刷新一落地就拿到新数字；还没有数字可显示时也可以用它写「查询中…」。
 - `error` = 最近一次刷新失败的首个错误字符串，成功时为 `null`。
 - `cc` / `deepseek` 在某家失败时**不是 null**，而是 `{ "ok": false, "error": "...", "windows": [] }` / `{ "ok": false, "error": "...", "balances": [] }`。客户端不得因缺字段崩。
 
@@ -171,7 +171,8 @@ platforms: [                 // 非内置平台（§7.3）的余额，失败也�
   - `{ action:'remove', id }`
   - `{ action:'settings', refreshMs }` —— 必须是 `refreshChoices` 里的值，否则 400
   → 返回与 GET 相同的负载；非法输入 400 + `{ ok:false, error }`。
-- 刷新节奏：`refreshMs` 只喂给懒触发判定（行、面板、平台列表三处 TTL 判断），clamp 到 15s–1h，默认 60s。**没有后台定时器**：没有人看的时候一次请求都不发。
+- 刷新节奏：`refreshMs` 是懒触发的 TTL（行、面板、平台列表三处判断），clamp 到 15s–1h，默认 60s。**Host 没有后台定时器**：没有人看的时候一次请求都不发。
+- 定时器在客户端行内：按快照里的 `refreshMs` 自调度下一次 `GET /snapshot`（落在 TTL 刚过期 + 500ms 左右），读到 `fetching:true` 就以 1.5s 连读，直到新数字落地；上一轮失败时退到 15s 重试。「刷新」按钮和切换会话会立即重排这个定时器，不必等满一个周期。
 - 适配器：
   - `deepseek`（内置）：`GET https://api.deepseek.com/user/balance`
   - `openrouter`（内置）：`GET https://openrouter.ai/api/v1/credits` → `data.total_credits` / `data.total_usage`，余额 = 两者之差

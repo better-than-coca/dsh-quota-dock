@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<title>dsh-quota-dock · 静态样式稿 v2</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #0f1011; }
+  body { font: 13px/1.55 "Segoe UI","Microsoft YaHei UI",-apple-system,sans-serif; color: #eceef0; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1420px; margin: 0 auto; padding: 26px 22px 60px; }
+  .page-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; }
+  .page-head h1 { font-size: 15px; font-weight: 600; margin: 0; }
+  .page-head span { font-size: 12px; color: #7f858c; }
+
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 980px) { .panels { grid-template-columns: 1fr; } }
+  .panel { border-radius: 12px; padding: 20px; border: 1px solid var(--qd-border-l2); background: var(--qd-bg); color: var(--qd-label-primary); }
+  .panel[data-theme="light"] { background: #fff; }
+  .panel[data-theme="dark"]  { background: #17181a; }
+
+  /* token 层：组件只读 --qd-*，--qd-* 映射宿主 --dsw-* */
+  .panel[data-theme="light"] {
+    --qd-bg: var(--dsw-alias-bg-base,#fff); --qd-bg-layer-1: var(--dsw-alias-bg-layer-1,#fafafa);
+    --qd-bg-layer-2: var(--dsw-alias-bg-layer-2,#fff);
+    --qd-card-fill: var(--dsw-alias-settings-card-fill,#f7f7f8);
+    --qd-card-stroke: var(--dsw-alias-settings-card-stroke,rgba(17,17,17,.08));
+    --qd-border-l2: var(--dsw-alias-border-l2,rgba(17,17,17,.08));
+    --qd-border-l3: var(--dsw-alias-border-l3,rgba(17,17,17,.13));
+    --qd-label-primary: var(--dsw-alias-label-primary,#17181a);
+    --qd-label-secondary: var(--dsw-alias-label-secondary,#5f6368);
+    --qd-label-tertiary: var(--dsw-alias-label-tertiary,#8a8f95);
+    --qd-label-caption: var(--dsw-alias-label-caption,#a0a4a9);
+    --qd-brand: var(--dsw-alias-brand-primary,#3d6fd6);
+    --qd-success: var(--dsw-alias-state-success-primary,#4d8a6e);
+    --qd-warn: var(--dsw-alias-state-warn-primary,#b07d33);
+    --qd-error: var(--dsw-alias-state-error-primary,#c05a52);
+    --qd-idle: var(--dsw-alias-state-idle-primary,#9aa0a6);
+    --qd-fill-l1: var(--dsw-alias-fill-l1,rgba(17,17,17,.055));
+    --qd-fill-l2: var(--dsw-alias-fill-l2,rgba(17,17,17,.10));
+    --qd-hover: var(--dsw-alias-interactive-bg-hover,rgba(17,17,17,.05));
+    --qd-focus: var(--dsw-focus-ring-color,#3d6fd6);
+    --qd-elevation: 0 10px 30px rgba(17,17,17,.10),0 1px 2px rgba(17,17,17,.06);
+  }
+  .panel[data-theme="dark"] {
+    --qd-bg: var(--dsw-alias-bg-base,#17181a); --qd-bg-layer-1: var(--dsw-alias-bg-layer-1,#1c1e21);
+    --qd-bg-layer-2: var(--dsw-alias-bg-layer-2,#23262a);
+    --qd-card-fill: var(--dsw-alias-settings-card-fill,#1e2023);
+    --qd-card-stroke: var(--dsw-alias-settings-card-stroke,rgba(255,255,255,.08));
+    --qd-border-l2: var(--dsw-alias-border-l2,rgba(255,255,255,.08));
+    --qd-border-l3: var(--dsw-alias-border-l3,rgba(255,255,255,.13));
+    --qd-label-primary: var(--dsw-alias-label-primary,#eceef0);
+    --qd-label-secondary: var(--dsw-alias-label-secondary,#a9aeb4);
+    --qd-label-tertiary: var(--dsw-alias-label-tertiary,#7f858c);
+    --qd-label-caption: var(--dsw-alias-label-caption,#6b7178);
+    --qd-brand: var(--dsw-alias-brand-primary,#6d9bff);
+    --qd-success: var(--dsw-alias-state-success-primary,#6faa8a);
+    --qd-warn: var(--dsw-alias-state-warn-primary,#c9a05c);
+    --qd-error: var(--dsw-alias-state-error-primary,#d2766d);
+    --qd-idle: var(--dsw-alias-state-idle-primary,#6f757c);
+    --qd-fill-l1: var(--dsw-alias-fill-l1,rgba(255,255,255,.055));
+    --qd-fill-l2: var(--dsw-alias-fill-l2,rgba(255,255,255,.10));
+    --qd-hover: var(--dsw-alias-interactive-bg-hover,rgba(255,255,255,.06));
+    --qd-focus: var(--dsw-focus-ring-color,#6d9bff);
+    --qd-elevation: 0 12px 34px rgba(0,0,0,.45),0 1px 2px rgba(0,0,0,.4);
+  }
+
+  .panel-title { display:flex; justify-content:space-between; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color: var(--qd-label-caption); margin-bottom:16px; }
+  .panel-title b { font-weight:600; }
+
+  .tag { font-size:11px; color: var(--qd-label-tertiary); margin:24px 0 9px; display:flex; align-items:center; gap:6px; }
+  .tag::after { content:""; flex:1; height:1px; background: var(--qd-border-l2); }
+  .tag:first-of-type { margin-top:0; }
+
+  /* 设置页骨架 */
+  .set { max-width: 620px; }
+  .set-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .set-head h2 { font-size:14px; font-weight:600; margin:0; }
+  .set-hint { font-size:11.5px; color: var(--qd-label-tertiary); margin:4px 0 16px; }
+
+  .sec { margin: 18px 0 0; }
+  .sec-head { display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:7px; }
+  .sec-title { font-size:11.5px; font-weight:600; color: var(--qd-label-secondary); margin:0; letter-spacing:.01em; }
+  .sec-aside { font-size:10.5px; color: var(--qd-label-caption); }
+
+  .flat { background: var(--qd-card-fill); border:1px solid var(--qd-card-stroke); border-radius: var(--dsw-radius-lg,10px); padding: 2px 10px; }
+  .brow { display:flex; align-items:center; gap:9px; padding:9px 0; }
+  .brow + .brow { border-top:1px solid var(--qd-border-l2); }
+  .brow-main { display:flex; align-items:center; gap:8px; min-width:0; flex:1; }
+  .dot { width:6px; height:6px; border-radius:999px; flex:none; background: var(--qd-idle); }
+  .dot[data-s="ok"] { background: var(--qd-success); }
+  .dot[data-s="bad"] { background: var(--qd-error); }
+  .brow-text { min-width:0; }
+  .brow-name { font-size:12.5px; font-weight:500; }
+  .brow-sub { font-size:10.5px; color: var(--qd-label-tertiary); font-family:"Cascadia Code",Consolas,monospace; }
+  .brow-value { font-size:12.5px; font-variant-numeric: tabular-nums; color: var(--qd-label-secondary); white-space:nowrap; }
+  .brow-age { font-size:10.5px; color: var(--qd-label-caption); white-space:nowrap; min-width:52px; text-align:right; }
+
+  .ghost { font:inherit; font-size:11.5px; border:1px solid transparent; background:transparent; color: var(--qd-label-secondary);
+    padding:3px 7px; border-radius: var(--dsw-radius-sm,6px); cursor:pointer; white-space:nowrap; }
+  .ghost:hover { background: var(--qd-hover); color: var(--qd-label-primary); }
+  .ghost:focus-visible { outline:2px solid var(--qd-focus); outline-offset:1px; }
+  .ghost-sm { font-size:11px; padding:2px 6px; }
+
+  .list { display:flex; flex-direction:column; }
+  .plat { display:flex; align-items:center; gap:9px; padding:9px 10px; margin:0 -10px; border-radius: var(--dsw-radius-sm,6px); }
+  .plat:hover { background: var(--qd-hover); }
+  .plat + .plat { box-shadow: inset 0 1px 0 var(--qd-border-l2); }
+  .pstate { font-size:10.5px; color: var(--qd-label-tertiary); white-space:nowrap; }
+  .pstate[data-s="ok"] { color: var(--qd-success); }
+  .pstate[data-s="bad"] { color: var(--qd-error); }
+  .pmoney { font-size:12.5px; font-variant-numeric:tabular-nums; color: var(--qd-label-secondary); min-width:76px; text-align:right; white-space:nowrap; }
+
+  /* 预设 chips + 表单 */
+  .pills { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+  .pill { font:inherit; font-size:11.5px; padding:3px 9px; border-radius:999px; cursor:pointer;
+    color: var(--qd-label-secondary); background: transparent; border:1px solid var(--qd-border-l2); }
+  .pill:hover { background: var(--qd-hover); }
+  .pill[data-active] { color: var(--qd-label-primary); border-color: var(--qd-border-l3); background: var(--qd-fill-l1); font-weight:500; }
+  .pill:focus-visible { outline:2px solid var(--qd-focus); outline-offset:1px; }
+
+  .fields { display:grid; gap:10px; }
+  .field { display:grid; gap:4px; }
+  .field-label { font-size:11px; color: var(--qd-label-tertiary); }
+  .input { font:inherit; font-size:12.5px; color: var(--qd-label-primary); background: var(--qd-bg-layer-2);
+    border:1px solid var(--qd-border-l2); border-radius: var(--dsw-radius-sm,6px); padding:6px 9px; width:100%; }
+  .input::placeholder { color: var(--qd-label-caption); }
+  .input:focus-visible { outline:2px solid var(--qd-focus); outline-offset:1px; border-color: transparent; }
+  .hint { font-size:10.5px; color: var(--qd-label-caption); margin:8px 0 0; line-height:1.5; }
+
+  .actions { display:flex; gap:8px; align-items:center; margin-top:12px; }
+  .btn-primary { font:inherit; font-size:12px; font-weight:500; padding:5px 12px; border-radius: var(--dsw-radius-sm,6px);
+    border:1px solid transparent; background: var(--dsw-alias-button-primary-fill, var(--qd-brand));
+    color: var(--dsw-alias-label-primary-foreground,#fff); cursor:pointer; }
+  .btn-primary:disabled { opacity:.45; cursor:not-allowed; }
+  .btn-primary:focus-visible { outline:2px solid var(--qd-focus); outline-offset:2px; }
+
+  .pref { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; }
+  .pref + .pref { border-top:1px solid var(--qd-border-l2); }
+  .pref-label { font-size:12px; color: var(--qd-label-secondary); }
+  .pref-ctl { display:flex; align-items:center; gap:8px; }
+  .sel { font:inherit; font-size:12px; color: var(--qd-label-secondary); background: var(--qd-bg-layer-2);
+    border:1px solid var(--qd-border-l2); border-radius: var(--dsw-radius-sm,6px); padding:4px 22px 4px 8px; appearance:none;
+    background-image: linear-gradient(45deg,transparent 50%,currentColor 50%), linear-gradient(135deg,currentColor 50%,transparent 50%);
+    background-position: calc(100% - 12px) 50%, calc(100% - 8px) 50%; background-size:4px 4px,4px 4px; background-repeat:no-repeat; cursor:pointer; }
+  .sel:focus-visible { outline:2px solid var(--qd-focus); outline-offset:1px; }
+  .mono { font-family:"Cascadia Code",Consolas,monospace; font-size:10.5px; color: var(--qd-label-tertiary);
+    background: var(--qd-fill-l1); padding:1px 5px; border-radius: var(--dsw-radius-xs,4px); }
+
+  /* 那一行 */
+  .dock-shell { display:flex; flex-direction:column; gap:10px; max-width:560px; }
+  .dock { display:inline-flex; align-items:center; gap:9px; padding:5px 9px; border-radius: var(--dsw-radius-md,8px);
+    border:1px solid var(--qd-border-l2); background: var(--qd-bg-layer-1); width:fit-content; }
+  .cell { display:inline-flex; align-items:center; gap:5px; }
+  .cell-label { font-size:10.5px; color: var(--qd-label-tertiary); }
+  .bar { width:42px; height:5px; border-radius:999px; overflow:hidden; background: var(--qd-fill-l1); }
+  .bar i { display:block; height:100%; border-radius:inherit; background: var(--qd-success); }
+  .bar i[data-s="warn"] { background: var(--qd-warn); }
+  .bar i[data-s="err"]  { background: var(--qd-error); }
+  .pct { font-size:10.5px; font-variant-numeric:tabular-nums; color: var(--qd-label-secondary); }
+  .pct[data-s="warn"] { color: var(--qd-warn); }
+  .pct[data-s="err"]  { color: var(--qd-error); }
+  .divider { width:1px; height:12px; background: var(--qd-border-l3); }
+  .cycle { display:inline-flex; align-items:center; gap:5px; font-size:10.5px; color: var(--qd-label-tertiary); }
+  .track { position:relative; width:54px; height:5px; border-radius:999px; overflow:hidden; background: var(--qd-fill-l1); display:inline-flex; }
+  .track .peak { background: var(--qd-fill-l2); height:100%; }
+  .track .off { background: var(--qd-brand); opacity:.55; height:100%; }
+  .track .marker { position:absolute; top:-2px; width:2px; height:9px; border-radius:1px; background: var(--qd-label-primary); }
+  .warn-flag { color: var(--qd-warn); font-size:11px; }
+
+  /* 弹层 */
+  .sheet { width: 400px; background: var(--qd-bg-layer-2); border:1px solid var(--qd-border-l3);
+    border-radius: var(--dsw-radius-panel,12px); box-shadow: var(--qd-elevation); padding:14px; }
+  .sheet-head { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+  .sheet-head b { font-size:12.5px; font-weight:600; flex:1; }
+  .hero { margin-bottom:14px; }
+  .hero-label { font-size:10.5px; color: var(--qd-label-tertiary); }
+  .hero-value { font-size:26px; font-weight:600; letter-spacing:-.01em; font-variant-numeric:tabular-nums; line-height:1.15; }
+  .hero-value small { font-size:11px; font-weight:400; color: var(--qd-label-tertiary); margin-left:3px; }
+  .hero-stats { display:flex; gap:20px; margin-top:8px; }
+  .hero-stat-k { font-size:10px; color: var(--qd-label-caption); }
+  .hero-stat-v { font-size:12.5px; font-variant-numeric:tabular-nums; color: var(--qd-label-secondary); }
+
+  .card { background: var(--qd-card-fill); border:1px solid var(--qd-card-stroke); border-radius: var(--dsw-radius-lg,10px); padding:10px 12px; }
+  .card + .card { margin-top:10px; }
+  .card-head { display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:8px; }
+  .card-title { font-size:12px; font-weight:600; }
+  .card-note { font-size:10px; color: var(--qd-label-caption); }
+  .win + .win { margin-top:9px; }
+  .win-h { display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px; }
+  .win-h span:first-child { color: var(--qd-label-secondary); }
+  .win-h span:last-child { color: var(--qd-label-tertiary); font-variant-numeric:tabular-nums; }
+  .win .bar { width:100%; height:4px; }
+  .kv { display:grid; grid-template-columns: auto 1fr; gap:4px 12px; margin-top:10px; padding-top:9px; border-top:1px solid var(--qd-border-l2); }
+  .kv-k { font-size:10.5px; color: var(--qd-label-tertiary); }
+  .kv-v { font-size:11.5px; color: var(--qd-label-secondary); text-align:right; font-variant-numeric:tabular-nums; }
+  .kv-v b { color: var(--qd-label-primary); font-weight:600; }
+  .kv-v[data-s="ok"] { color: var(--qd-success); }
+  .sheet-foot { margin-top:11px; padding-top:9px; border-top:1px solid var(--qd-border-l2);
+    display:flex; justify-content:space-between; align-items:center; font-size:10.5px; color: var(--qd-label-tertiary); }
+  .link { color: var(--dsw-alias-link, var(--qd-brand)); text-decoration:none; }
+  .link:hover { text-decoration:underline; }
+</style></head>
+<body><div class="wrap">
+  <div class="page-head">
+    <h1>dsh-quota-dock · 静态样式稿 v2</h1>
+    <span>内容按 client.js 实际结构 1:1 还原 · 只换样式，不增删字段 · 单位/文案保留原文</span>
+  </div>
+  <div class="panels">
+    <div class="panel" data-theme="light">
+      <div class="panel-title"><b>Light</b><span>跟随宿主亮色</span></div>
+      
+      <div class="tag">① 设置页 · settings.section</div>
+      <div class="set">
+        <div class="set-head">
+          <h2>额度与平台</h2>
+          <button class="ghost">刷新</button>
+        </div>
+        <p class="set-hint">这里只管配置，金额看输入框上方那一行。</p>
+
+        <div class="sec">
+          <div class="sec-head"><h3 class="sec-title">内置平台</h3><span class="sec-aside">key 从环境变量读</span></div>
+          <div class="flat">
+            <div class="brow">
+              <div class="brow-main">
+                <span class="dot" data-s="ok"></span>
+                <div class="brow-text">
+                  <div class="brow-name">Command Code</div>
+                  <div class="brow-sub">COMMANDCODE_API_KEY</div>
+                </div>
+              </div>
+              <span class="brow-value">月 62%</span>
+              <span class="brow-age">12 秒前</span>
+              <button class="ghost ghost-sm">刷新</button>
+            </div>
+            <div class="brow">
+              <div class="brow-main">
+                <span class="dot" data-s="ok"></span>
+                <div class="brow-text">
+                  <div class="brow-name">DeepSeek</div>
+                  <div class="brow-sub">DEEPSEEK_API_KEY</div>
+                </div>
+              </div>
+              <span class="brow-value">¥15.46</span>
+              <span class="brow-age">12 秒前</span>
+              <button class="ghost ghost-sm">刷新</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-head"><h3 class="sec-title">已接入平台</h3><span class="sec-aside">2</span></div>
+          <div class="list">
+            <div class="plat">
+              <span class="dot" data-s="ok"></span>
+              <div class="brow-text" style="flex:1">
+                <div class="brow-name">OpenRouter</div>
+                <div class="brow-sub">openrouter · https://openrouter.ai/api/v1/credits</div>
+              </div>
+              <span class="pstate" data-s="ok">正常</span>
+              <span class="pmoney">USD 42.10</span>
+              <button class="ghost ghost-sm">删除</button>
+            </div>
+            <div class="plat">
+              <span class="dot" data-s="bad"></span>
+              <div class="brow-text" style="flex:1">
+                <div class="brow-name">硅基流动</div>
+                <div class="brow-sub">custom · https://api.siliconflow.cn/v1/user/info</div>
+              </div>
+              <span class="pstate" data-s="bad">失败</span>
+              <span class="pmoney">—</span>
+              <button class="ghost ghost-sm">删除</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-head"><h3 class="sec-title">接入新平台</h3><span class="sec-aside">选预设可省掉填地址</span></div>
+          <div class="pills">
+            <button class="pill">OpenRouter</button>
+            <button class="pill" data-active>LiteLLM</button>
+            <button class="pill">New API</button>
+            <button class="pill">硅基流动</button>
+            <button class="pill">Kimi</button>
+            <button class="pill">自定义</button>
+          </div>
+          <div class="fields">
+            <label class="field"><span class="field-label">名称</span><input class="input" value="LiteLLM"></label>
+            <label class="field"><span class="field-label">接口地址</span><input class="input" placeholder="https://…"></label>
+            <label class="field"><span class="field-label">API key</span><input class="input" type="password" value="sk-demo"></label>
+          </div>
+          <p class="hint">任何返回 JSON 的余额接口都能接：Host 会把最多 50 个数字字段平铺成行。</p>
+          <p class="hint">API key 只存在本机 platforms.json，接口只回传是否配置；单家超时 15 秒，失败不影响其他家。</p>
+          <div class="actions">
+            <button class="btn-primary">添加</button>
+            <button class="ghost">取消</button>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-head"><h3 class="sec-title">数据与刷新</h3></div>
+          <div class="flat" style="padding:2px 12px">
+            <div class="pref">
+              <span class="pref-label">刷新间隔</span>
+              <div class="pref-ctl"><select class="sel"><option>5 分钟</option><option>2 分钟</option><option>10 分钟</option></select></div>
+            </div>
+            <div class="pref">
+              <span class="pref-label">最近刷新</span>
+              <div class="pref-ctl"><span class="brow-age" style="min-width:auto">12 秒前</span><button class="ghost ghost-sm">立即刷新</button></div>
+            </div>
+            <div class="pref">
+              <span class="pref-label">配置文件</span>
+              <div class="pref-ctl"><span class="mono">…\dsh-quota-dock\platforms.json</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="tag">② 输入框上方那一行 · composer row</div>
+      <div class="dock-shell">
+        <div class="dock">
+          <span class="cell"><span class="cell-label">5h</span><span class="bar"><i style="width:41%"></i></span><span class="pct">41%</span></span>
+          <span class="cell"><span class="cell-label">周</span><span class="bar"><i data-s="warn" style="width:88%"></i></span><span class="pct" data-s="warn">88%</span></span>
+          <span class="cell"><span class="cell-label">月</span><span class="bar"><i style="width:62%"></i></span><span class="pct">62%</span></span>
+          <span class="divider"></span>
+          <span class="cycle">
+            <span class="track"><span class="peak" style="width:62%"></span><span class="off" style="width:38%"></span><span class="marker" style="left:37%"></span></span>
+            <span>峰时 · 距谷 2 小时 10 分钟</span>
+          </span>
+        </div>
+        <div class="dock">
+          <span class="cell"><span class="cell-label">5h</span><span class="bar"><i style="width:41%"></i></span><span class="pct">41%</span></span>
+          <span class="cell"><span class="cell-label">周</span><span class="bar"><i data-s="err" style="width:96%"></i></span><span class="pct" data-s="err">96%</span></span>
+          <span class="cell"><span class="cell-label">月</span><span class="bar"><i data-s="err" style="width:97%"></i></span><span class="pct" data-s="err">97%</span></span>
+          <span class="divider"></span>
+          <span class="cycle">
+            <span class="track"><span class="peak" style="width:62%"></span><span class="off" style="width:38%"></span><span class="marker" style="left:88%"></span></span>
+            <span>谷时 · 距峰 1 小时 05 分钟</span>
+          </span>
+          <span class="warn-flag">⚠</span>
+        </div>
+      </div>
+      
+      <div class="tag">③ 详情弹层 · shell.overlay</div>
+      <div class="sheet">
+        <div class="sheet-head">
+          <b>额度与余额</b>
+          <button class="ghost ghost-sm">刷新</button>
+          <button class="ghost ghost-sm" aria-label="关闭">✕</button>
+        </div>
+
+        <div class="hero">
+          <div class="hero-label">本月剩余</div>
+          <div class="hero-value">$580<small>credits</small></div>
+          <div class="hero-stats">
+            <div><div class="hero-stat-k">本月已用</div><div class="hero-stat-v">$120 credits</div></div>
+            <div><div class="hero-stat-k">还能用</div><div class="hero-stat-v">12 天</div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><span class="card-title">Command Code</span><span class="card-note">重置时间按本地时区</span></div>
+          <div class="win">
+            <div class="win-h"><span>5h</span><span>$58 / $100 · 2 小时 10 分钟后重置</span></div>
+            <div class="bar"><i style="width:58%"></i></div>
+          </div>
+          <div class="win">
+            <div class="win-h"><span>周</span><span>$412 / $500 · 3 天后重置</span></div>
+            <div class="bar"><i data-s="warn" style="width:82%"></i></div>
+          </div>
+          <div class="win">
+            <div class="win-h"><span>月</span><span>$412 / $500 · 11-01 00:00</span></div>
+            <div class="bar"><i data-s="warn" style="width:82%"></i></div>
+          </div>
+          <div class="kv">
+            <span class="kv-k">月度已用</span><span class="kv-v">$120 credits</span>
+            <span class="kv-k">月度剩余</span><span class="kv-v"><b>$580</b> credits</span>
+            <span class="kv-k">订阅</span><span class="kv-v">pro · active</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><span class="card-title">DeepSeek</span><span class="card-note">谷 00:30–08:30（周末全天谷价）</span></div>
+          <div class="kv" style="margin-top:0;padding-top:0;border-top:0">
+            <span class="kv-k">总额</span><span class="kv-v"><b>¥15.46</b></span>
+            <span class="kv-k">赠送</span><span class="kv-v">¥5.00</span>
+            <span class="kv-k">充值</span><span class="kv-v">¥10.46</span>
+            <span class="kv-k">可用</span><span class="kv-v" data-s="ok">正常</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><span class="card-title">其他平台</span></div>
+          <div class="kv" style="margin-top:0;padding-top:0;border-top:0">
+            <span class="kv-k">OpenRouter</span><span class="kv-v">USD 42.10</span>
+            <span class="kv-k">硅基流动</span><span class="kv-v">—</span>
+          </div>
+        </div>
+
+        <div class="sheet-foot">
+          <span>每 5 分钟自动重取一次</span>
+          <a class="link" href="#">平台接入在 设置 → 额度与平台</a>
+        </div>
+      </div>
+    </div>
+    <div class="panel" data-theme="dark">
+      <div class="panel-title"><b>Dark</b><span>跟随宿主暗色 / claude 皮肤</span></div>
+      
+      <div class="tag">① 设置页 · settings.section</div>
+      <div class="set">
+        <div class="set-head">
+          <h2>额度与平台</h2>
+          <button class="ghost">刷新</button>
+        </div>
+        <p class="set-hint">这里只管配置，金额看输入框上方那一行。</p>
+
+        <div class="sec">
+          <div class="sec-head"><h3 class="sec-title">内置平台</h3><span class="sec-aside">key 从环境变量读</span></div>
+          <div class="flat">
+            <div class="brow">
+              <div class="brow-main">
+                <span class="dot" data-s="ok"></span>
+                <div class="brow-text">
+                  <div class="brow-name">Command Code</div>
+                  <div class="brow-sub">COMMANDCODE_API_KEY</div>
+                </div>
+              </div>
+              <span class="brow-value">月 62%</span>
+              <span class="brow-age">12 秒前</span>
+              <button class="ghost ghost-sm">刷新</button>
+            </div>
+            <div class="brow">
+              <div class="brow-main">
+                <span class="dot" data-s="ok"></span>
+                <div class="brow-text">
+                  <div class="brow-name">DeepSeek</div>
+                  <div class="brow-sub">DEEPSEEK_API_KEY</div>
+                </div>
+              </div>
+              <span class="brow-value">¥15.46</span>
+              <span class="brow-age">12 秒前</span>
+              <button class="ghost ghost-sm">刷新</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-head"><h3 class="sec-title">已接入平台</h3><span class="sec-aside">2</span></div>
+          <div class="list">
+            <div class="plat">
+              <span class="dot" data-s="ok"></span>
+              <div class="brow-text" style="flex:1">
+                <div class="brow-name">OpenRouter</div>
+                <div class="brow-sub">openrouter · https://openrouter.ai/api/v1/credits</div>
+              </div>
+              <span class="pstate" data-s="ok">正常</span>
+              <span class="pmoney">USD 42.10</span>
+              <button class="ghost ghost-sm">删除</button>
+            </div>
+            <div class="plat">
+              <span class="dot" data-s="bad"></span>
+              <div class="brow-text" style="flex:1">
+                <div class="brow-name">硅基流动</div>
+                <div class="brow-sub">custom · https://api.siliconflow.cn/v1/user/info</div>
+              </div>
+              <span class="pstate" data-s="bad">失败</span>
+              <span class="pmoney">—</span>
+              <button class="ghost ghost-sm">删除</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-head"><h3 class="sec-title">接入新平台</h3><span class="sec-aside">选预设可省掉填地址</span></div>
+          <div class="pills">
+            <button class="pill">OpenRouter</button>
+            <button class="pill" data-active>LiteLLM</button>
+            <button class="pill">New API</button>
+            <button class="pill">硅基流动</button>
+            <button class="pill">Kimi</button>
+            <button class="pill">自定义</button>
+          </div>
+          <div class="fields">
+            <label class="field"><span class="field-label">名称</span><input class="input" value="LiteLLM"></label>
+            <label class="field"><span class="field-label">接口地址</span><input class="input" placeholder="https://…"></label>
+            <label class="field"><span class="field-label">API key</span><input class="input" type="password" value="sk-demo"></label>
+          </div>
+          <p class="hint">任何返回 JSON 的余额接口都能接：Host 会把最多 50 个数字字段平铺成行。</p>
+          <p class="hint">API key 只存在本机 platforms.json，接口只回传是否配置；单家超时 15 秒，失败不影响其他家。</p>
+          <div class="actions">
+            <button class="btn-primary">添加</button>
+            <button class="ghost">取消</button>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-head"><h3 class="sec-title">数据与刷新</h3></div>
+          <div class="flat" style="padding:2px 12px">
+            <div class="pref">
+              <span class="pref-label">刷新间隔</span>
+              <div class="pref-ctl"><select class="sel"><option>5 分钟</option><option>2 分钟</option><option>10 分钟</option></select></div>
+            </div>
+            <div class="pref">
+              <span class="pref-label">最近刷新</span>
+              <div class="pref-ctl"><span class="brow-age" style="min-width:auto">12 秒前</span><button class="ghost ghost-sm">立即刷新</button></div>
+            </div>
+            <div class="pref">
+              <span class="pref-label">配置文件</span>
+              <div class="pref-ctl"><span class="mono">…\dsh-quota-dock\platforms.json</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="tag">② 输入框上方那一行 · composer row</div>
+      <div class="dock-shell">
+        <div class="dock">
+          <span class="cell"><span class="cell-label">5h</span><span class="bar"><i style="width:41%"></i></span><span class="pct">41%</span></span>
+          <span class="cell"><span class="cell-label">周</span><span class="bar"><i data-s="warn" style="width:88%"></i></span><span class="pct" data-s="warn">88%</span></span>
+          <span class="cell"><span class="cell-label">月</span><span class="bar"><i style="width:62%"></i></span><span class="pct">62%</span></span>
+          <span class="divider"></span>
+          <span class="cycle">
+            <span class="track"><span class="peak" style="width:62%"></span><span class="off" style="width:38%"></span><span class="marker" style="left:37%"></span></span>
+            <span>峰时 · 距谷 2 小时 10 分钟</span>
+          </span>
+        </div>
+        <div class="dock">
+          <span class="cell"><span class="cell-label">5h</span><span class="bar"><i style="width:41%"></i></span><span class="pct">41%</span></span>
+          <span class="cell"><span class="cell-label">周</span><span class="bar"><i data-s="err" style="width:96%"></i></span><span class="pct" data-s="err">96%</span></span>
+          <span class="cell"><span class="cell-label">月</span><span class="bar"><i data-s="err" style="width:97%"></i></span><span class="pct" data-s="err">97%</span></span>
+          <span class="divider"></span>
+          <span class="cycle">
+            <span class="track"><span class="peak" style="width:62%"></span><span class="off" style="width:38%"></span><span class="marker" style="left:88%"></span></span>
+            <span>谷时 · 距峰 1 小时 05 分钟</span>
+          </span>
+          <span class="warn-flag">⚠</span>
+        </div>
+      </div>
+      
+      <div class="tag">③ 详情弹层 · shell.overlay</div>
+      <div class="sheet">
+        <div class="sheet-head">
+          <b>额度与余额</b>
+          <button class="ghost ghost-sm">刷新</button>
+          <button class="ghost ghost-sm" aria-label="关闭">✕</button>
+        </div>
+
+        <div class="hero">
+          <div class="hero-label">本月剩余</div>
+          <div class="hero-value">$580<small>credits</small></div>
+          <div class="hero-stats">
+            <div><div class="hero-stat-k">本月已用</div><div class="hero-stat-v">$120 credits</div></div>
+            <div><div class="hero-stat-k">还能用</div><div class="hero-stat-v">12 天</div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><span class="card-title">Command Code</span><span class="card-note">重置时间按本地时区</span></div>
+          <div class="win">
+            <div class="win-h"><span>5h</span><span>$58 / $100 · 2 小时 10 分钟后重置</span></div>
+            <div class="bar"><i style="width:58%"></i></div>
+          </div>
+          <div class="win">
+            <div class="win-h"><span>周</span><span>$412 / $500 · 3 天后重置</span></div>
+            <div class="bar"><i data-s="warn" style="width:82%"></i></div>
+          </div>
+          <div class="win">
+            <div class="win-h"><span>月</span><span>$412 / $500 · 11-01 00:00</span></div>
+            <div class="bar"><i data-s="warn" style="width:82%"></i></div>
+          </div>
+          <div class="kv">
+            <span class="kv-k">月度已用</span><span class="kv-v">$120 credits</span>
+            <span class="kv-k">月度剩余</span><span class="kv-v"><b>$580</b> credits</span>
+            <span class="kv-k">订阅</span><span class="kv-v">pro · active</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><span class="card-title">DeepSeek</span><span class="card-note">谷 00:30–08:30（周末全天谷价）</span></div>
+          <div class="kv" style="margin-top:0;padding-top:0;border-top:0">
+            <span class="kv-k">总额</span><span class="kv-v"><b>¥15.46</b></span>
+            <span class="kv-k">赠送</span><span class="kv-v">¥5.00</span>
+            <span class="kv-k">充值</span><span class="kv-v">¥10.46</span>
+            <span class="kv-k">可用</span><span class="kv-v" data-s="ok">正常</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><span class="card-title">其他平台</span></div>
+          <div class="kv" style="margin-top:0;padding-top:0;border-top:0">
+            <span class="kv-k">OpenRouter</span><span class="kv-v">USD 42.10</span>
+            <span class="kv-k">硅基流动</span><span class="kv-v">—</span>
+          </div>
+        </div>
+
+        <div class="sheet-foot">
+          <span>每 5 分钟自动重取一次</span>
+          <a class="link" href="#">平台接入在 设置 → 额度与平台</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></body></html>

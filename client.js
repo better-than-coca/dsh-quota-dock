@@ -39,6 +39,17 @@ window.__ModuleLoader__.load({
     const POLL_BUDGET_MS = 30000
     /** The countdown to the next rate switch re-renders this often. */
     const TICK_MS = 30 * 1000
+    /**
+     * The read loop: a read is also what makes the Host refresh (it answers from
+     * cache and starts the cycle), so the cadence below IS the refresh timer.
+     * Arrive just past the cache TTL, follow a running cycle closely, and back
+     * off when the last cycle failed.
+     */
+    const FALLBACK_REFRESH_MS = 60 * 1000
+    const READ_LEAD_MS = 500
+    const FAST_FOLLOW_MS = 1500
+    const MIN_READ_MS = 2000
+    const OVERDUE_RETRY_MS = 15 * 1000
     /** Command Code's three windows, fixed order, all three on the row. */
     const SHOWN_WINDOW_IDS = ['fiveHour', 'weekly', 'monthly']
     /** Fill-bar tiers: alerting starts at 80% of the cap; at 95% it is red. */
@@ -271,6 +282,18 @@ window.__ModuleLoader__.load({
       } catch (error) {
         return undefined
       }
+    }
+
+    /** `window.setTimeout`, or the global one in a runtime without a window. */
+    const setTimer = (fn, ms) => (typeof window !== 'undefined' && typeof window.setTimeout === 'function'
+      ? window.setTimeout(fn, ms)
+      : setTimeout(fn, ms))
+
+    /** Cancel a timer started by `setTimer`; a missing id is a no-op. */
+    const clearTimer = id => {
+      if (id === null || id === undefined) return
+      if (typeof window !== 'undefined' && typeof window.clearTimeout === 'function') window.clearTimeout(id)
+      else clearTimeout(id)
     }
 
     /**
@@ -715,6 +738,15 @@ window.__ModuleLoader__.load({
     function sheetTree(state) {
       const { t, now, snapshot, busy, onClose, onRefresh } = state
       const cards = sheetCards(snapshot, t, now)
+      const snap = snapshot ?? {}
+      const ccOk = snap.cc?.ok !== false
+      const dsOk = snap.deepseek?.ok !== false
+      const cap = toNum(snap.cc?.monthlyCap)
+      const used = toNum(snap.cc?.usedMonthlyCredits)
+      // Only present when both figures exist: a dash here would read as missing data.
+      const usedShare = cap !== null && cap > 0 && used !== null
+        ? `${Math.round((used / cap) * 100)}%`
+        : null
       const card = (key, title, options, children) => h('section', {
         className: options.wide === true
           ? 'dsh-quota-dock-card dsh-quota-dock-card-wide'
@@ -728,42 +760,40 @@ window.__ModuleLoader__.load({
           ? null
           : h('span', { className: 'dsh-quota-dock-card-note', key: 'note' }, options.note)),
       ...children)
-      /** Key/value rows on a shared baseline: the label left, the number right. */
+      /** Key/value rows on a shared baseline; falsy rows drop out instead of printing a dash. */
       const kv = (rows, key) => h('div', { className: 'dsh-quota-dock-kv', key },
-        ...rows.flatMap((row, index) => [
-          h('span', { className: 'dsh-quota-dock-kv-label', key: `${index}-label` }, row.label),
-          row.state === undefined
-            ? h('span', { className: 'dsh-quota-dock-kv-value', key: `${index}-value` },
-                row.value === null || row.value === undefined || row.value === ''
-                  ? '—'
-                  : String(row.value))
-            // The dot is decoration; the word beside it is the state itself.
-            : h('span', {
-                className: 'dsh-quota-dock-status',
-                'data-state': row.state,
-                key: `${index}-value`,
-              },
-                h('i', { key: 'dot' }),
-                row.value),
-        ]))
-      // The hero: the month's remaining credits first and biggest, the two
-      // supporting figures beside it. One plate, one message, no chrome.
-      const unitDays = t('unitDays')
-      const stat = (key, label, value) => h('div', { className: 'dsh-quota-dock-hero-stat', key },
-        h('div', { className: 'dsh-quota-dock-hero-stat-label', key: 'label' }, label),
-        h('div', { className: 'dsh-quota-dock-hero-stat-value', key: 'value' }, value))
+        ...rows.flatMap((row, index) => {
+          const value = row.value === null || row.value === undefined || row.value === ''
+            ? '—'
+            : String(row.value)
+          return [
+            h('span', { className: 'dsh-quota-dock-kv-label', key: `${index}-label` }, row.label),
+            row.state === undefined
+              ? h('span', { className: 'dsh-quota-dock-kv-value', key: `${index}-value` }, value)
+              : h('span', {
+                  className: 'dsh-quota-dock-status',
+                  'data-state': row.state,
+                  key: `${index}-value`,
+                },
+                  h('i', { key: 'dot' }),
+                  value),
+          ]
+        }))
+      const stat = (key, label, value) => h('div', { className: 'dsh-quota-dock-stat', key },
+        h('span', { className: 'dsh-quota-dock-stat-label', key: 'label' }, label),
+        h('span', { className: 'dsh-quota-dock-stat-value', key: 'value' }, value))
       const hero = h('div', {
         className: 'dsh-quota-dock-hero',
         'data-quota-card': 'overview',
         key: 'overview',
       },
       h('div', { className: 'dsh-quota-dock-hero-main', key: 'main' },
-        h('div', { className: 'dsh-quota-dock-hero-label', key: 'label' }, t('overviewRemaining')),
-        h('div', { className: 'dsh-quota-dock-hero-value', key: 'value' }, cards.overview.remaining)),
-      h('div', { className: 'dsh-quota-dock-hero-side', key: 'side' },
+        h('span', { className: 'dsh-quota-dock-hero-label', key: 'label' }, t('overviewRemaining')),
+        h('span', { className: 'dsh-quota-dock-hero-value', key: 'value' }, cards.overview.remaining)),
+      h('div', { className: 'dsh-quota-dock-stats', key: 'side' },
         stat('used', t('overviewUsed'), cards.overview.used),
-        stat('days', t('overviewDaysLeft'),
-          `${cards.overview.days}${unitDays === '' ? '' : ` ${unitDays}`}`)))
+        stat('days', t('overviewDaysLeft'), `${cards.overview.days} ${t('unitDays')}`),
+        usedShare === null ? null : stat('share', t('monthUsed'), usedShare)))
       const windowRows = cards.windows.map(window => h('div', {
         className: 'dsh-quota-dock-qrow',
         'data-quota-window': window.key,
@@ -774,10 +804,13 @@ window.__ModuleLoader__.load({
         renderBar(window.window, window.label, t),
         renderPercent(window.window),
         h('span', { className: 'dsh-quota-dock-qr', key: 'reset' }, window.reset)))
-      // One line under the month row: used · left · period end · plan. The word
-      // 月 appears once, on the row above, and never again here.
+      // The month's figures on one line; a missing cap simply drops its own cell.
+      const detailRows = [
+        ...cards.detail,
+        cap === null ? null : { label: t('monthTotal'), value: `${"$"}${numText(cap)}` },
+      ].filter(row => row !== null)
       const detailKids = []
-      cards.detail.forEach((row, index) => {
+      detailRows.forEach((row, index) => {
         if (index > 0) {
           detailKids.push(h('span', { className: 'dsh-quota-dock-detail-sep', key: `${index}-sep` }, '·'))
         }
@@ -788,7 +821,6 @@ window.__ModuleLoader__.load({
       const wallets = cards.wallets.length === 0
         ? [h('div', { className: 'dsh-quota-dock-empty', key: 'none' }, t('none'))]
         : cards.wallets.flatMap(wallet => [
-            // One wallet needs no heading of its own: its currency is the card note.
             cards.wallets.length > 1
               ? h('div', { className: 'dsh-quota-dock-cur', key: `${wallet.key}-cur` },
                   String(wallet.currency).toUpperCase())
@@ -807,6 +839,10 @@ window.__ModuleLoader__.load({
             h('span', { className: 'dsh-quota-dock-prow-name', key: 'name' }, entry.label),
             entry.kind ? h('span', { className: 'dsh-quota-dock-prow-kind', key: 'kind' }, entry.kind) : null,
             h('span', { className: 'dsh-quota-dock-prow-money', key: 'money' }, entry.value)))
+      const platformNote = cards.platforms.length === 0
+        ? null
+        : h('p', { className: 'dsh-quota-dock-note', key: 'count' },
+            `${t('sectionPlatforms')} ${cards.platforms.length}`)
       const walletNote = cards.wallets.length === 1
         ? String(cards.wallets[0].currency).toUpperCase()
         : null
@@ -817,7 +853,6 @@ window.__ModuleLoader__.load({
       return h('div', {
         className: 'dsh-quota-dock-layer',
         'data-quota-sheet': '',
-        // The shell.overlay layer is click-through; opt this tree back in.
         style: { pointerEvents: 'auto' },
       },
         h('div', {
@@ -827,8 +862,14 @@ window.__ModuleLoader__.load({
           'aria-label': t('sheetTitle'),
         },
           h('div', { className: 'dsh-quota-dock-sheet-head', key: 'head' },
-            h('span', { className: 'dsh-quota-dock-sheet-title', key: 'title' }, t('sheetTitle')),
-            h('span', { className: 'dsh-quota-dock-sheet-age', key: 'age' }, ageText(snapshot, t)),
+            h('div', { className: 'dsh-quota-dock-sheet-id', key: 'id' },
+              h('span', { className: 'dsh-quota-dock-sheet-title', key: 'title' }, t('sheetTitle')),
+              h('span', { className: 'dsh-quota-dock-sheet-age', key: 'age' }, ageText(snapshot, t))),
+            h('div', { className: 'dsh-quota-dock-chips', key: 'chips' },
+              h('span', { className: 'dsh-quota-dock-chip', 'data-state': ccOk ? 'ok' : 'bad', key: 'cc' },
+                'CC ', ccOk ? t('stateOk') : t('stateBad')),
+              h('span', { className: 'dsh-quota-dock-chip', 'data-state': dsOk ? 'ok' : 'bad', key: 'ds' },
+                'DS ', dsOk ? t('stateOk') : t('stateBad'))),
             h('button', {
               type: 'button',
               className: 'dsh-quota-dock-ghost',
@@ -855,7 +896,7 @@ window.__ModuleLoader__.load({
               cards.extras.length === 0 ? null : kv(cards.extras, 'extras-kv'),
               h('p', { className: 'dsh-quota-dock-note', key: 'cycle' }, cycleText(t, now)),
             ]),
-            card('platforms', t('otherPlatforms'), {}, platformRows)),
+            card('platforms', t('otherPlatforms'), {}, [...platformRows, platformNote])),
           h('div', { className: 'dsh-quota-dock-sheet-foot', key: 'foot' },
             h('span', { key: 'cadence' }, footLeft),
             h('span', { key: 'where' }, t('platformsInSettings')))))
@@ -878,7 +919,10 @@ window.__ModuleLoader__.load({
             [entry?.kind, entry?.baseUrl]
               .filter(part => typeof part === 'string' && part !== '')
               .join(' · '))),
-        h('span', { className: 'dsh-quota-dock-pstate' }, ok ? t('stateOk') : t('stateBad')),
+        h('span', {
+          className: 'dsh-quota-dock-pstate',
+          'data-quota-state': ok ? 'ok' : 'bad',
+        }, ok ? t('stateOk') : t('stateBad')),
         h('span', { className: 'dsh-quota-dock-pmoney' }, platformMoney(entry, t)),
         h('button', {
           type: 'button',
@@ -935,7 +979,6 @@ window.__ModuleLoader__.load({
           ? null
           : h('span', { className: 'dsh-quota-dock-sec-aside', key: 'aside' }, String(aside))),
       ...children)
-      // Label above the control, never a placeholder standing in for a label.
       const field = (key, label, input) => h('label', {
         className: 'dsh-quota-dock-field',
         key,
@@ -949,7 +992,14 @@ window.__ModuleLoader__.load({
       const used = toNum(cc.usedMonthlyCredits)
       const percent = cap !== null && cap > 0 && used !== null ? Math.round((used / cap) * 100) : null
       const wallet = Array.isArray(deepseek.balances) ? deepseek.balances[0] : null
-      const builtinRow = (key, name, ref, value, ok) => h('div', {
+      const list = Array.isArray(platforms) ? platforms : null
+      const healthy = list === null ? null : list.filter(entry => entry?.ok === true).length
+      const broken = list === null ? null : list.length - healthy
+      const summary = (key, label, value) => h('div', { className: 'dsh-quota-dock-sum', key },
+        h('span', { className: 'dsh-quota-dock-sum-value', key: 'v' }, value),
+        h('span', { className: 'dsh-quota-dock-sum-label', key: 'l' }, label))
+      /** One built-in row: what it reads, how much of the month is gone, when it last answered. */
+      const builtinRow = (key, name, ref, value, ok, share) => h('div', {
         className: 'dsh-quota-dock-brow',
         key,
       },
@@ -963,6 +1013,10 @@ window.__ModuleLoader__.load({
         h('div', { className: 'dsh-quota-dock-brow-text', key: 'text' },
           h('div', { className: 'dsh-quota-dock-brow-name', key: 'name' }, name),
           h('div', { className: 'dsh-quota-dock-brow-sub', key: 'sub' }, ref))),
+      share === null
+        ? null
+        : h('span', { className: 'dsh-quota-dock-mini', key: 'share', 'aria-hidden': true },
+            h('i', { style: { width: `${share}%` } })),
       h('span', { className: 'dsh-quota-dock-brow-value', key: 'value' }, value),
       h('span', { className: 'dsh-quota-dock-brow-age', key: 'age' }, age),
       h('button', {
@@ -972,28 +1026,30 @@ window.__ModuleLoader__.load({
         disabled: busy === true,
         onClick: onRefresh,
       }, t('refresh')))
+      const emptyState = h('div', { className: 'dsh-quota-dock-empty-row', key: 'empty' },
+        h('div', { key: 'text' },
+          h('div', { className: 'dsh-quota-dock-empty-title', key: 'title' }, t('emptyList')),
+          h('div', { className: 'dsh-quota-dock-empty-sub', key: 'sub' }, t('emptyHint'))),
+        h('button', {
+          type: 'button',
+          className: 'dsh-quota-dock-ghost dsh-quota-dock-ghost-sm',
+          key: 'jump',
+          onClick: () => {
+            if (typeof document === 'undefined') return
+            const node = document.querySelector('[data-quota-section="add"]')
+            if (node !== null && typeof node.scrollIntoView === 'function') node.scrollIntoView({ block: 'nearest' })
+          },
+        }, t('addExisting')))
       const listBody = platforms === null
         ? [h('div', { className: 'dsh-quota-dock-empty', key: 'waiting' }, t('fetchingNow'))]
         : platforms.length === 0
-          ? [h('div', { className: 'dsh-quota-dock-empty-row', key: 'empty' },
-              h('div', { key: 'text' },
-                h('div', { className: 'dsh-quota-dock-empty-title', key: 'title' }, t('emptyList')),
-                h('div', { className: 'dsh-quota-dock-empty-sub', key: 'sub' }, t('emptyHint'))),
-              h('button', {
-                type: 'button',
-                className: 'dsh-quota-dock-ghost dsh-quota-dock-ghost-sm',
-                key: 'jump',
-                onClick: () => {
-                  if (typeof document === 'undefined') return
-                  const node = document.querySelector('[data-quota-section="add"]')
-                  if (node !== null && typeof node.scrollIntoView === 'function') node.scrollIntoView({ block: 'nearest' })
-                },
-              }, t('addExisting')))]
+          ? [emptyState]
           : platforms.map((entry, index) => platformRow(entry, index, t, onRemove))
       const chip = entry => h('button', {
         type: 'button',
         className: 'dsh-quota-dock-pill',
         'data-quota-preset': entry.id,
+        'data-quota-kind': entry.kind,
         'data-active': form.preset === entry.id ? '' : undefined,
         key: entry.id,
         onClick: () => onForm({ preset: entry.id, name: entry.name, baseUrl: entry.baseUrl, kind: entry.kind }),
@@ -1012,12 +1068,17 @@ window.__ModuleLoader__.load({
             onClick: onRefresh,
           }, t('refresh'))),
         h('p', { className: 'dsh-quota-dock-set-hint' }, t('settingsHint')),
+        h('div', { className: 'dsh-quota-dock-summary' },
+          summary('total', t('sectionPlatforms'), list === null ? '—' : String(list.length)),
+          summary('ok', t('stateOk'), healthy === null ? '—' : String(healthy)),
+          summary('bad', t('stateBad'), broken === null ? '—' : String(broken)),
+          summary('cadence', t('intervalLabel'), intervalLabel(refreshMs, t))),
         section('builtin', t('sectionBuiltin'), t('builtinNote'), [
           h('div', { className: 'dsh-quota-dock-card-flat', key: 'rows' },
             builtinRow('cc', 'Command Code', 'COMMANDCODE_API_KEY',
-              percent === null ? '—' : `${t('monthly')} ${percent}%`, cc.ok === true),
+              percent === null ? '—' : `${t('monthly')} ${percent}%`, cc.ok === true, percent),
             builtinRow('deepseek', 'DeepSeek', 'DEEPSEEK_API_KEY',
-              wallet === null ? '—' : moneyText(wallet.totalBalance, wallet.currency), deepseek.ok === true)),
+              wallet === null ? '—' : moneyText(wallet.totalBalance, wallet.currency), deepseek.ok === true, null)),
         ]),
         section('platforms', t('sectionPlatforms'), platforms === null ? null : String(platforms.length), [
           h('div', { className: 'dsh-quota-dock-list', key: 'list' }, ...listBody),
@@ -1085,285 +1146,340 @@ window.__ModuleLoader__.load({
     }
 
     const CSS = [
-      // Full-width row above the composer card: the input dock's type scale, laid
-      // out as wrapping flex items instead of `·` separators.
+      '/* ---- token layer ----------------------------------------------------------',
+      '   Components read --qd-*; --qd-* maps the host --dsw-* tokens so the surfaces',
+      '   follow the skin, the theme and the density the rest of DSH uses.',
+      '   The three state colours are ours, not the host\'s: the host palette is',
+      '   green-500 #22c55e / amber-500 #f59e0b / red-500 #ef4444, which reads as a',
+      '   warning light next to this type scale. These are the muted equivalents. */',
+      '.dsh-quota-dock-root, .dsh-quota-dock-set, .dsh-quota-dock-sheet {',
+      '  --qd-layer-0: var(--dsw-alias-bg-base, #fff);',
+      '  --qd-layer-1: var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-l1, #fafafa));',
+      '  --qd-layer-2: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-l1, #fff));',
+      '  --qd-card-fill: var(--dsw-alias-settings-card-fill, var(--dsw-alias-bg-l1, #f7f7f8));',
+      '  --qd-card-stroke: var(--dsw-alias-settings-card-stroke, var(--dsw-alias-border-l1, rgb(127 127 127 / 16%)));',
+      '  --qd-border-1: var(--dsw-alias-border-l1, rgb(127 127 127 / 16%));',
+      '  --qd-border-2: var(--dsw-alias-border-l2, rgb(127 127 127 / 28%));',
+      '  --qd-border-3: var(--dsw-alias-border-l3, rgb(127 127 127 / 40%));',
+      '  --qd-label-1: var(--dsw-alias-label-primary, #17181a);',
+      '  --qd-label-2: var(--dsw-alias-label-secondary, #5f6368);',
+      '  --qd-label-3: var(--dsw-alias-label-tertiary, #8a8a8a);',
+      '  --qd-label-4: var(--dsw-alias-label-caption, var(--dsw-alias-label-quaternary, #a0a4a9));',
+      '  --qd-brand: var(--dsw-alias-brand-primary, #3d6fd6);',
+      '  --qd-success: #4f8d6c;',
+      '  --qd-warn: #b9812f;',
+      '  --qd-error: #c05a52;',
+      '  --qd-idle: var(--dsw-alias-label-quaternary, #9aa0a6);',
+      '  --qd-fill-1: var(--dsw-alias-fill-l1, rgb(127 127 127 / 8%));',
+      '  --qd-fill-2: var(--dsw-alias-fill-l2, rgb(127 127 127 / 16%));',
+      '  --qd-hover: var(--dsw-alias-interactive-bg-hover, rgb(127 127 127 / 8%));',
+      '  --qd-focus: var(--dsw-focus-ring-color, var(--dsw-alias-brand-primary, #3d6fd6));',
+      '  --qd-r-xs: var(--dsw-radius-xs, 4px);',
+      '  --qd-r-sm: var(--dsw-radius-sm, 6px);',
+      '  --qd-r-md: var(--dsw-radius-md, 8px);',
+      '  --qd-r-lg: var(--dsw-radius-lg, 10px);',
+      '  --qd-r-panel: var(--dsw-radius-panel, 12px);',
+      '  --qd-elev: var(--dsw-elevation-prominent, 0 24px 64px -12px rgb(0 0 0 / 22%), 0 2px 8px rgb(0 0 0 / 6%));',
+      '}',
+      '/* ---- the row above the composer: three windows plus the DS cycle clock ---- */',
       '.dsh-quota-dock-root {',
       '  position: relative; display: inline-flex; align-items: center; width: 100%;',
       '  box-sizing: border-box; padding: 2px 2px 6px;',
-      '  color: var(--dsw-alias-label-tertiary, #8a8a8a);',
-      '  font-size: 12px; line-height: 18px; font-variant-numeric: tabular-nums;',
+      '  color: var(--qd-label-3);',
+      '  font-size: 11.5px; line-height: 18px; font-variant-numeric: tabular-nums;',
       '}',
       '.dsh-quota-dock-row {',
       '  display: inline-flex; flex: 0 1 auto; min-width: 0; margin: 0 auto; justify-content: center; align-items: center;',
-      '  gap: 8px; padding: 2px 10px; border: 0; border-radius: 6px; background: transparent;',
+      '  gap: 8px; padding: 2px 10px; border: 0; border-radius: var(--qd-r-sm); background: transparent;',
       '  color: inherit; font: inherit; cursor: pointer;',
+      '  transition: background-color 120ms ease-out;',
       '}',
-      '.dsh-quota-dock-row:hover { background: var(--dsw-alias-fill-l2, rgb(127 127 127 / 18%)); }',
-      '.dsh-quota-dock-row:focus-visible {',
-      '  outline: 1px solid var(--dsw-alias-border-l3, rgb(127 127 127 / 40%)); outline-offset: 1px;',
-      '}',
+      '.dsh-quota-dock-row:hover { background: var(--qd-hover); }',
+      '.dsh-quota-dock-row:focus-visible { outline: 2px solid var(--qd-focus); outline-offset: 1px; }',
       '.dsh-quota-dock-strip {',
       '  display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px;',
       '  flex: 0 1 auto; min-width: 0;',
       '}',
       '.dsh-quota-dock-cell { display: inline-flex; align-items: center; gap: 6px; flex: none; }',
-      '.dsh-quota-dock-label { color: var(--dsw-alias-label-tertiary, #8a8a8a); font-weight: 500; }',
-      '.dsh-quota-dock-pct { flex: none; color: var(--dsw-alias-label-secondary, #6b6b6b); font-weight: 500; }',
-      '.dsh-quota-dock-pct[data-level="warn"] { color: var(--dsw-alias-state-warn-primary, #e0a03a); }',
-      '.dsh-quota-dock-pct[data-level="high"] { color: var(--dsw-alias-state-error-primary, #e0574f); }',
-      '.dsh-quota-dock-pct[data-level="unknown"] { color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
+      '.dsh-quota-dock-label { color: var(--qd-label-3); font-weight: 500; }',
+      '.dsh-quota-dock-pct { flex: none; color: var(--qd-label-2); font-weight: 500; font-variant-numeric: tabular-nums; }',
+      '.dsh-quota-dock-pct[data-level="warn"] { color: var(--qd-warn); }',
+      '.dsh-quota-dock-pct[data-level="high"] { color: var(--qd-error); }',
+      '.dsh-quota-dock-pct[data-level="unknown"] { color: var(--qd-label-3); }',
       '.dsh-quota-dock-bar {',
-      '  display: inline-block; flex: none; width: 48px; height: 7px; border-radius: 999px;',
-      '  box-sizing: border-box; border: 1px solid var(--dsw-alias-border-l2, rgb(127 127 127 / 28%));',
-      '  background: var(--dsw-alias-fill-l2, rgb(127 127 127 / 18%)); overflow: hidden;',
+      '  display: inline-block; flex: none; width: 44px; height: 5px; border-radius: 999px;',
+      '  box-sizing: border-box; border: 0; background: var(--qd-fill-1); overflow: hidden;',
       '}',
       '.dsh-quota-dock-bar-fill {',
       '  display: block; height: 100%; border-radius: inherit;',
-      '  background: #7BB295;',
+      '  background: var(--qd-success);',
       '  transition: width 150ms ease-out;',
       '}',
-      '.dsh-quota-dock-bar[data-level="warn"] .dsh-quota-dock-bar-fill {',
-      '  background: var(--dsw-alias-state-warn-primary, #e0a03a);',
-      '}',
-      '.dsh-quota-dock-bar[data-level="high"] .dsh-quota-dock-bar-fill {',
-      '  background: var(--dsw-alias-state-error-primary, #e0574f);',
-      '}',
+      '.dsh-quota-dock-bar[data-level="warn"] .dsh-quota-dock-bar-fill { background: var(--qd-warn); }',
+      '.dsh-quota-dock-bar[data-level="high"] .dsh-quota-dock-bar-fill { background: var(--qd-error); }',
       '.dsh-quota-dock-bar[data-level="unknown"] .dsh-quota-dock-bar-fill { background: transparent; }',
       '.dsh-quota-dock-ds { display: inline-flex; align-items: center; gap: 10px; flex: none; }',
-      '.dsh-quota-dock-divider { flex: none; width: 1px; height: 12px; margin: 0 4px;',
-      '  background: var(--dsw-alias-border-l2, rgb(127 127 127 / 28%)); }',
+      '.dsh-quota-dock-divider { flex: none; width: 1px; height: 12px; margin: 0 4px; background: var(--qd-border-3); }',
       '.dsh-quota-dock-track {',
-      '  position: relative; display: inline-flex; flex: none; width: 56px; height: 7px;',
-      '  box-sizing: border-box; border: 1px solid var(--dsw-alias-border-l2, rgb(127 127 127 / 28%));',
-      '  border-radius: 999px; background: var(--dsw-alias-fill-l2, rgb(127 127 127 / 18%)); overflow: hidden;',
+      '  position: relative; display: inline-flex; flex: none; width: 52px; height: 5px;',
+      '  box-sizing: border-box; border: 0; border-radius: 999px; background: var(--qd-fill-1); overflow: hidden;',
       '}',
-      '.dsh-quota-dock-track-peak {',
-      '  display: block; height: 100%; background: var(--dsw-alias-state-warn-primary, #e0a03a);',
-      '}',
-      '.dsh-quota-dock-track-off {',
-      '  display: block; height: 100%; background: var(--dsw-alias-brand-primary, #5B9BF3);',
-      '}',
+      // The 峰/谷 track keeps the host palette on purpose: this one is a clock, not a
+      // budget meter, and the bright pair reads better against the muted bars beside it.
+      '.dsh-quota-dock-track-peak { display: block; height: 100%; background: var(--dsw-alias-state-warn-primary, #e0a03a); }',
+      '.dsh-quota-dock-track-off { display: block; height: 100%; background: var(--dsw-alias-brand-primary, #5B9BF3); }',
       '.dsh-quota-dock-marker {',
       '  position: absolute; top: 0; bottom: 0; width: 1px; z-index: 1;',
-      '  background: var(--dsw-alias-label-primary, #1a1a1a);',
-      '  box-shadow: 0 0 0 1px var(--dsw-alias-bg-layer-1, #fff);',
+      '  background: var(--qd-label-1); box-shadow: 0 0 0 1px var(--qd-layer-1);',
       '}',
       '.dsh-quota-dock-tier { font-weight: 500; }',
-      '.dsh-quota-dock-until { color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
-      '.dsh-quota-dock-root[data-warn] .dsh-quota-dock-strip { color: var(--dsw-alias-label-secondary, #6b6b6b); }',
-      '.dsh-quota-dock-warn { flex: none; margin-left: 6px; color: var(--dsw-alias-label-secondary, #6b6b6b); }',
-      // The money sheet: a centred floating panel, wide and tall enough to read,
-      // never as small as a tooltip.
+      '.dsh-quota-dock-until { color: var(--qd-label-3); }',
+      '.dsh-quota-dock-root[data-warn] .dsh-quota-dock-strip { color: var(--qd-label-2); }',
+      '.dsh-quota-dock-warn { flex: none; margin-left: 6px; color: var(--qd-warn); }',
+      '/* ---- the sheet ---------------------------------------------------------- */',
       '.dsh-quota-dock-layer { position: fixed; inset: 0; z-index: 900; display: flex; align-items: center; justify-content: center; padding: 24px; pointer-events: none; }',
       '.dsh-quota-dock-sheet {',
       '  position: relative; margin: 0; pointer-events: auto; z-index: 900;',
-      '  width: min(820px, 90vw); max-height: 78vh; overflow: auto; box-sizing: border-box;',
-      '  border-radius: 14px; background: var(--dsw-alias-bg-l1, #fff);',
-      '  box-shadow: 0 24px 64px -12px rgba(0, 0, 0, .22), 0 2px 8px rgba(0, 0, 0, .06); padding: 0;',
-      '  color: var(--dsw-alias-label-primary, #1a1a1a); font-size: 13px; line-height: 1.6;',
+      '  width: min(780px, 90vw); max-height: 78vh; overflow: auto; box-sizing: border-box;',
+      '  border-radius: var(--qd-r-panel); background: var(--qd-layer-2);',
+      '  border: 1px solid var(--qd-border-2);',
+      '  box-shadow: var(--qd-elev); padding: 0;',
+      '  color: var(--qd-label-1); font-size: 12.5px; line-height: 1.6;',
       '  animation: dsh-quota-sheet-in 180ms ease-out;',
       '}',
       '@keyframes dsh-quota-sheet-in {',
-      '  from { transform: translateY(-24px); opacity: 0; }',
+      '  from { transform: translateY(-20px); opacity: 0; }',
       '  to { transform: translateY(0); opacity: 1; }',
       '}',
-      '.dsh-quota-dock-sheet-head { display: flex; align-items: center; gap: 10px; padding: 15px 20px 13px; }',
-      '.dsh-quota-dock-sheet-title { font-size: 14.5px; font-weight: 600; }',
-      '.dsh-quota-dock-sheet-age { color: var(--dsw-alias-label-tertiary, #8a8a8a);',
-      '  font-size: 11.5px; font-variant-numeric: tabular-nums; }',
-      // The divider is a full-bleed hairline under the hero, not a boxed rule.
-      '.dsh-quota-dock-rule { height: 1px; margin: 0 20px;',
-      '  background: var(--dsw-alias-border-l2, rgb(127 127 127 / 28%)); }',
-      '.dsh-quota-dock-ghost { margin-left: auto; height: 28px; min-height: 28px; padding: 0 10px; cursor: pointer;',
-      '  font: inherit; font-size: 12px; border: 1px solid var(--dsw-alias-border-l2, rgb(127 127 127 / 28%));',
-      '  border-radius: 7px; background: transparent; color: var(--dsw-alias-label-secondary, #6b6b6b);',
-      '  transition: color 150ms ease-out, border-color 150ms ease-out; }',
-      '.dsh-quota-dock-ghost:hover { color: var(--dsw-alias-label-primary, #1a1a1a);',
-      '  border-color: var(--dsw-alias-border-l3, rgb(127 127 127 / 40%)); }',
+      '.dsh-quota-dock-sheet-head { display: flex; align-items: center; gap: 12px; padding: 12px 16px 11px; }',
+      '.dsh-quota-dock-sheet-id { display: flex; align-items: baseline; gap: 8px; min-width: 0; }',
+      '.dsh-quota-dock-sheet-title { font-size: 12.5px; font-weight: 600; letter-spacing: .01em; }',
+      '.dsh-quota-dock-sheet-age { color: var(--qd-label-4); font-size: 10.5px; font-variant-numeric: tabular-nums; }',
+      '.dsh-quota-dock-chips { display: flex; align-items: center; gap: 6px; margin-left: auto; }',
+      '.dsh-quota-dock-chip {',
+      '  display: inline-flex; align-items: center; gap: 4px;',
+      '  padding: 1px 7px; border-radius: 999px;',
+      '  font-size: 10.5px; font-weight: 500; line-height: 16px;',
+      '  color: var(--qd-label-2); background: var(--qd-fill-1);',
+      '}',
+      '.dsh-quota-dock-chip::before { content: ""; width: 5px; height: 5px; border-radius: 999px; background: var(--qd-idle); }',
+      '.dsh-quota-dock-chip[data-state="ok"] { color: var(--qd-success); }',
+      '.dsh-quota-dock-chip[data-state="ok"]::before { background: var(--qd-success); }',
+      '.dsh-quota-dock-chip[data-state="bad"] { color: var(--qd-error); }',
+      '.dsh-quota-dock-chip[data-state="bad"]::before { background: var(--qd-error); }',
+      '.dsh-quota-dock-ghost { height: 26px; min-height: 26px; padding: 0 9px; cursor: pointer;',
+      '  font: inherit; font-size: 11.5px; border: 1px solid var(--qd-border-2);',
+      '  border-radius: var(--qd-r-sm); background: transparent; color: var(--qd-label-2);',
+      '  transition: color 150ms ease-out, border-color 150ms ease-out, background-color 150ms ease-out; }',
+      '.dsh-quota-dock-ghost:hover { color: var(--qd-label-1); background: var(--qd-hover); border-color: var(--qd-border-3); }',
       '.dsh-quota-dock-ghost:disabled { opacity: .5; cursor: default; }',
-      '.dsh-quota-dock-sheet-close { box-sizing: border-box; width: 27px; height: 27px; flex: none;',
-      '  border: 0; border-radius: 7px; background: transparent; cursor: pointer;',
-      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); font-size: 16px; line-height: 1;',
-      '  transition: color 150ms ease-out; }',
-      '.dsh-quota-dock-sheet-close:hover { color: var(--dsw-alias-label-primary, #1a1a1a); }',
-      // The hero: one plate, one message — how much of the month is left. The
-      // label sits above the number, the two supporting figures beside it.
-      '.dsh-quota-dock-hero { display: flex; align-items: flex-end; gap: 26px; flex-wrap: wrap;',
-      '  box-sizing: border-box; padding: 2px 20px 16px; font-variant-numeric: tabular-nums; }',
-      '.dsh-quota-dock-hero-main { display: flex; flex-direction: column; gap: 3px; }',
-      '.dsh-quota-dock-hero-label { font-size: 11.5px; letter-spacing: .02em;',
-      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
-      '.dsh-quota-dock-hero-value { font-size: 30px; font-weight: 650; line-height: 1.12;',
-      '  letter-spacing: -0.01em; }',
-      '.dsh-quota-dock-hero-side { display: flex; gap: 24px; padding-bottom: 4px; }',
-      '.dsh-quota-dock-hero-stat { display: flex; flex-direction: column; gap: 2px; }',
-      '.dsh-quota-dock-hero-stat-label { font-size: 11.5px; color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
-      '.dsh-quota-dock-hero-stat-value { font-size: 14px; font-weight: 600;',
-      '  color: var(--dsw-alias-label-secondary, #6b6b6b); }',
-      '.dsh-quota-dock-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 16px 20px 18px; }',
-      '.dsh-quota-dock-card { box-sizing: border-box; min-width: 0; padding: 13px 14px 12px;',
-      '  align-self: start;',
-      '  border: 1px solid var(--dsw-alias-border-l2, rgb(127 127 127 / 28%)); border-radius: 11px; }',
-      // Command Code owns its own full-width row: three windows do not fit in a column.
+      '.dsh-quota-dock-sheet-close { box-sizing: border-box; width: 26px; height: 26px; flex: none;',
+      '  border: 0; border-radius: var(--qd-r-sm); background: transparent; cursor: pointer;',
+      '  color: var(--qd-label-3); font-size: 15px; line-height: 1;',
+      '  transition: color 150ms ease-out, background-color 150ms ease-out; }',
+      '.dsh-quota-dock-sheet-close:hover { color: var(--qd-label-1); background: var(--qd-hover); }',
+      '.dsh-quota-dock-hero { display: flex; align-items: flex-end; gap: 28px; flex-wrap: wrap;',
+      '  box-sizing: border-box; padding: 2px 16px 14px; font-variant-numeric: tabular-nums; }',
+      '.dsh-quota-dock-hero-main { display: flex; flex-direction: column; gap: 1px; }',
+      '.dsh-quota-dock-hero-label { font-size: 10.5px; letter-spacing: .02em; color: var(--qd-label-4); }',
+      '.dsh-quota-dock-hero-value { font-size: 26px; font-weight: 600; line-height: 1.15; letter-spacing: -0.01em; }',
+      '.dsh-quota-dock-stats { display: flex; gap: 22px; padding-bottom: 2px; flex-wrap: wrap; }',
+      '.dsh-quota-dock-stat { display: flex; flex-direction: column; gap: 1px; }',
+      '.dsh-quota-dock-stat-label { font-size: 10.5px; color: var(--qd-label-4); }',
+      '.dsh-quota-dock-stat-value { font-size: 13px; font-weight: 600; color: var(--qd-label-2); }',
+      '.dsh-quota-dock-rule { height: 1px; margin: 0 16px; background: var(--qd-border-2); }',
+      '.dsh-quota-dock-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px 16px 14px; }',
+      '.dsh-quota-dock-card { box-sizing: border-box; min-width: 0; padding: 11px 12px 10px;',
+      '  align-self: start; background: var(--qd-card-fill);',
+      '  border: 1px solid var(--qd-card-stroke); border-radius: var(--qd-r-lg); }',
       '.dsh-quota-dock-card-wide { grid-column: 1 / -1; }',
       '.dsh-quota-dock-card-head { display: flex; align-items: baseline; justify-content: space-between;',
-      '  gap: 10px; margin-bottom: 2px; }',
-      '.dsh-quota-dock-card-title { font-size: 12.5px; font-weight: 600; }',
-      '.dsh-quota-dock-card-note { font-size: 11px; color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
-      // A Command Code window: label | used/cap | bar | percentage | reset.
-      '.dsh-quota-dock-qrow { display: grid; grid-template-columns: 40px 112px 1fr 46px 88px;',
-      '  align-items: center; gap: 10px; padding: 8px 0; min-width: 0; }',
-      '.dsh-quota-dock-qrow + .dsh-quota-dock-qrow {',
-      '  border-top: 1px solid var(--dsw-alias-border-l2, rgb(127 127 127 / 28%)); }',
-      '.dsh-quota-dock-qk { font-size: 12px; color: var(--dsw-alias-label-secondary, #6b6b6b); }',
-      '.dsh-quota-dock-qv { font-size: 12.5px; font-weight: 600; text-align: right;',
+      '  gap: 10px; margin-bottom: 3px; }',
+      '.dsh-quota-dock-card-title { font-size: 12px; font-weight: 600; }',
+      '.dsh-quota-dock-card-note { font-size: 10.5px; color: var(--qd-label-4); }',
+      '.dsh-quota-dock-qrow { display: grid; grid-template-columns: 34px 108px 1fr 40px 84px;',
+      '  align-items: center; gap: 10px; padding: 7px 0; min-width: 0; }',
+      '.dsh-quota-dock-qrow + .dsh-quota-dock-qrow { border-top: 1px solid var(--qd-border-1); }',
+      '.dsh-quota-dock-qk { font-size: 11.5px; color: var(--qd-label-2); }',
+      '.dsh-quota-dock-qv { font-size: 12px; font-weight: 600; text-align: right;',
       '  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }',
-      '.dsh-quota-dock-qrow .dsh-quota-dock-bar { width: auto; height: 5px; }',
-      '.dsh-quota-dock-qrow .dsh-quota-dock-pct { font-size: 12px; font-weight: 600;',
+      '.dsh-quota-dock-qrow .dsh-quota-dock-bar { width: auto; height: 4px; }',
+      '.dsh-quota-dock-qrow .dsh-quota-dock-pct { font-size: 11.5px; font-weight: 600;',
       '  text-align: right; font-variant-numeric: tabular-nums; }',
-      '.dsh-quota-dock-qr { font-size: 11px; text-align: right; white-space: nowrap;',
-      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); font-variant-numeric: tabular-nums; }',
-      // The month's own figures, flattened onto one line under the month row.
+      '.dsh-quota-dock-qr { font-size: 10.5px; text-align: right; white-space: nowrap;',
+      '  color: var(--qd-label-4); font-variant-numeric: tabular-nums; }',
       '.dsh-quota-dock-detail { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px;',
-      '  padding: 8px 0 2px 50px; font-size: 11.5px; line-height: 1.5;',
-      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
-      '.dsh-quota-dock-detail-sep { color: var(--dsw-alias-border-l3, rgb(127 127 127 / 40%)); }',
-      '.dsh-quota-dock-detail b { font-weight: 600; color: var(--dsw-alias-label-secondary, #6b6b6b);',
-      '  font-variant-numeric: tabular-nums; }',
-      // Key/value rows on a shared baseline: the label left, the number right.
-      '.dsh-quota-dock-kv { display: grid; grid-template-columns: 1fr auto; gap: 7px 12px;',
+      '  padding: 8px 0 1px 44px; font-size: 10.5px; line-height: 1.5; color: var(--qd-label-4); }',
+      '.dsh-quota-dock-detail-sep { color: var(--qd-border-3); }',
+      '.dsh-quota-dock-detail b { font-weight: 600; color: var(--qd-label-2); font-variant-numeric: tabular-nums; }',
+      '.dsh-quota-dock-kv { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px;',
       '  align-items: center; margin-top: 6px; font-variant-numeric: tabular-nums; }',
-      '.dsh-quota-dock-kv-label { font-size: 12px; color: var(--dsw-alias-label-secondary, #6b6b6b); }',
-      '.dsh-quota-dock-kv-value { font-size: 12.5px; font-weight: 600; text-align: right; white-space: nowrap; }',
-      // The state mark: a dot plus the word, never colour alone.
+      '.dsh-quota-dock-kv-label { font-size: 11px; color: var(--qd-label-3); }',
+      '.dsh-quota-dock-kv-value { font-size: 12px; font-weight: 600; text-align: right; white-space: nowrap; }',
       '.dsh-quota-dock-status { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px;',
-      '  font-size: 12px; font-weight: 500; color: var(--dsw-alias-state-success-primary, #7bb295); }',
-      '.dsh-quota-dock-status i { width: 6px; height: 6px; flex: none; border-radius: 50%;',
-      '  background: currentColor; box-shadow: 0 0 0 3px rgb(123 178 149 / 16%); }',
-      '.dsh-quota-dock-status[data-state="bad"] { color: var(--dsw-alias-state-error-primary, #e0574f); }',
-      '.dsh-quota-dock-status[data-state="bad"] i { box-shadow: 0 0 0 3px rgb(224 87 79 / 16%); }',
-      // A quiet footnote inside a card, separated by a hairline above it.
-      '.dsh-quota-dock-note { margin: 10px 0 0; padding-top: 9px; font-size: 11.5px; line-height: 1.55;',
-      '  color: var(--dsw-alias-label-tertiary, #8a8a8a);',
-      '  border-top: 1px solid var(--dsw-alias-border-l2, rgb(127 127 127 / 28%)); }',
-      '.dsh-quota-dock-note b { font-weight: 600; color: var(--dsw-alias-label-secondary, #6b6b6b); }',
-      // A card that has nothing to show says why, without a rule above it.
-      '.dsh-quota-dock-note-solo { margin-top: 6px; padding-top: 0; border-top: 0; }',
-      '.dsh-quota-dock-cur { margin-bottom: 4px; font-size: 11px; font-weight: 600;',
-      '  letter-spacing: 0.06em; color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
-      '.dsh-quota-dock-prow { display: flex; align-items: center; gap: 8px; min-height: 32px; min-width: 0; }',
-      '.dsh-quota-dock-prow-name { min-width: 0; overflow: hidden; text-overflow: ellipsis;',
-      '  white-space: nowrap; }',
-      '.dsh-quota-dock-prow-kind { flex: none; font-size: 11px;',
-      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
-      '.dsh-quota-dock-prow-money { flex: none; margin-left: auto; font-size: 14px; font-weight: 600;',
+      '  font-size: 11.5px; font-weight: 500; color: var(--qd-success); }',
+      '.dsh-quota-dock-status i { width: 6px; height: 6px; flex: none; border-radius: 50%; background: currentColor; }',
+      '.dsh-quota-dock-status[data-state="bad"] { color: var(--qd-error); }',
+      '.dsh-quota-dock-note { margin: 9px 0 0; padding-top: 8px; font-size: 10.5px; line-height: 1.55;',
+      '  color: var(--qd-label-4); border-top: 1px solid var(--qd-border-1); }',
+      '.dsh-quota-dock-note b { font-weight: 600; color: var(--qd-label-2); }',
+      '.dsh-quota-dock-note-solo { margin-top: 5px; padding-top: 0; border-top: 0; }',
+      '.dsh-quota-dock-cur { margin-bottom: 3px; font-size: 10px; font-weight: 600;',
+      '  letter-spacing: 0.06em; color: var(--qd-label-4); }',
+      '.dsh-quota-dock-prow { display: flex; align-items: center; gap: 8px; min-height: 28px; min-width: 0; }',
+      '.dsh-quota-dock-prow-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+      '.dsh-quota-dock-prow-kind { flex: none; font-size: 10.5px; color: var(--qd-label-4); }',
+      '.dsh-quota-dock-prow-money { flex: none; margin-left: auto; font-size: 12.5px; font-weight: 600;',
       '  font-variant-numeric: tabular-nums; }',
-      '.dsh-quota-dock-empty { font-size: 13px; color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
-      // The footer names the cadence on the left and where the form lives on the
-      // right, on a tinted strip so it reads as chrome rather than as a card.
+      '.dsh-quota-dock-empty { font-size: 11.5px; color: var(--qd-label-3); }',
       '.dsh-quota-dock-sheet-foot { display: flex; align-items: center; justify-content: space-between;',
-      '  gap: 10px; padding: 11px 20px 13px; font-size: 11.5px;',
-      '  color: var(--dsw-alias-label-tertiary, #8a8a8a);',
-      '  border-top: 1px solid var(--dsw-alias-border-l2, rgb(127 127 127 / 28%));',
-      '  background: var(--dsw-alias-fill-l1, rgb(127 127 127 / 6%)); }',
-      // The settings page: configuration only, so nothing here is money.
-      '.dsh-quota-dock-set { display: block; max-width: 640px;',
-      '  color: var(--dsw-alias-label-primary, #1a1a1a); font-size: 13px; line-height: 1.6; }',
+      '  gap: 10px; padding: 9px 16px 11px; font-size: 10.5px; color: var(--qd-label-3);',
+      '  border-top: 1px solid var(--qd-border-2); background: var(--qd-fill-1); }',
+      '/* ---- the settings page --------------------------------------------------- */',
+      '.dsh-quota-dock-set { display: block; max-width: 600px;',
+      '  color: var(--qd-label-1); font-size: 12.5px; line-height: 1.6; }',
       '.dsh-quota-dock-set-head { display: flex; align-items: center; gap: 12px; }',
-      '.dsh-quota-dock-set-title { margin: 0; font-size: 16px; font-weight: 600; }',
+      '.dsh-quota-dock-set-title { margin: 0; font-size: 14px; font-weight: 600; }',
       '.dsh-quota-dock-set-title + .dsh-quota-dock-ghost { margin-left: auto; }',
-      '.dsh-quota-dock-set-hint { margin: 4px 0 24px; font-size: 13px;',
-      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
-      '.dsh-quota-dock-sec { margin-bottom: 24px; }',
-      '.dsh-quota-dock-sec-title { margin: 0 0 8px; font-size: 12px; font-weight: 600; }',
-      '.dsh-quota-dock-list { display: block; }',
-      '.dsh-quota-dock-plat { display: flex; align-items: center; gap: 8px; min-height: 44px;',
-      '  padding: 0 8px; border-radius: 8px; transition: background-color 150ms ease-out; }',
-      '.dsh-quota-dock-plat:hover { background: var(--dsw-alias-fill-l1, rgb(127 127 127 / 8%)); }',
-      '.dsh-quota-dock-dot { flex: none; width: 8px; height: 8px; border-radius: 999px;',
-      '  background: var(--dsw-alias-label-quaternary, #b0b0b0); }',
-      '.dsh-quota-dock-dot[data-quota-dot="ok"] { background: #7BB295; }',
-      '.dsh-quota-dock-dot[data-quota-dot="bad"] { background: #E0574F; }',
-      '.dsh-quota-dock-pname { min-width: 0; overflow: hidden; text-overflow: ellipsis;',
-      '  white-space: nowrap; font-size: 14px; font-weight: 600; }',
-      '.dsh-quota-dock-badge { flex: none; padding: 1px 6px; border-radius: 4px; font-size: 11px;',
-      '  background: var(--dsw-alias-fill-l1, rgb(127 127 127 / 8%));',
-      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
-      '.dsh-quota-dock-pstate { flex: none; font-size: 11px;',
-      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
-      '.dsh-quota-dock-pmoney { flex: none; margin-left: auto; font-size: 14px; font-weight: 600;',
-      '  font-variant-numeric: tabular-nums; }',
-      '.dsh-quota-dock-remove { flex: none; min-height: 32px; padding: 0 8px; cursor: pointer;',
-      '  font: inherit; font-size: 12px; border: 0; border-radius: 8px; background: transparent;',
-      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); transition: color 150ms ease-out; }',
-      '.dsh-quota-dock-remove:hover { color: #E0574F; }',
-      '.dsh-quota-dock-form { margin-top: 4px; }',
-      '.dsh-quota-dock-pills { display: flex; gap: 8px; }',
-      '.dsh-quota-dock-pill { min-height: 36px; padding: 0 14px; cursor: pointer; font: inherit;',
-      '  font-size: 13px; border: 1px solid var(--dsw-alias-border-l2, rgb(127 127 127 / 28%));',
-      '  border-radius: 999px; background: transparent; color: var(--dsw-alias-label-secondary, #6b6b6b);',
-      '  transition: color 150ms ease-out, background-color 150ms ease-out; }',
-      '.dsh-quota-dock-pill[data-active] { border-color: transparent;',
-      '  background: var(--dsw-alias-fill-l2, rgb(127 127 127 / 18%));',
-      '  color: var(--dsw-alias-label-primary, #1a1a1a); }',
-      '.dsh-quota-dock-field { display: block; margin-top: 12px; }',
-      '.dsh-quota-dock-field-label { display: block; margin-bottom: 6px; font-size: 12px;',
-      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
-      '.dsh-quota-dock-field input { box-sizing: border-box; width: 100%; height: 36px; padding: 0 10px;',
-      '  border: 1px solid var(--dsw-alias-border-l2, rgb(127 127 127 / 28%)); border-radius: 8px;',
-      '  background: transparent; color: inherit; font: inherit; }',
-      '.dsh-quota-dock-submit { display: block; box-sizing: border-box; width: 100%; height: 36px;',
-      '  margin-top: 16px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600;',
-      '  border: 0; border-radius: 8px; background: #5B9BF3; color: #fff;',
-      '  transition: opacity 150ms ease-out; }',
-      '.dsh-quota-dock-submit:hover { opacity: .88; }',
-      '.dsh-quota-dock-submit:disabled { opacity: .5; cursor: default; }',
-      '.dsh-quota-dock-about { margin: 0; font-size: 12px;',
-      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
-      '.dsh-quota-dock-pmsg { margin-top: 12px; font-size: 12px;',
-      '  color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
-      // ---- settings v3 (2026-10-18): provider rows, presets, cadence ----
+      '.dsh-quota-dock-set-hint { margin: 4px 0 14px; font-size: 11.5px; color: var(--qd-label-3); }',
+      '.dsh-quota-dock-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px;',
+      '  margin-bottom: 20px; background: var(--qd-border-1);',
+      '  border: 1px solid var(--qd-border-1); border-radius: var(--qd-r-lg); overflow: hidden; }',
+      '.dsh-quota-dock-sum { display: flex; flex-direction: column; gap: 1px; padding: 9px 12px;',
+      '  background: var(--qd-card-fill); font-variant-numeric: tabular-nums; }',
+      '.dsh-quota-dock-sum-value { font-size: 15px; font-weight: 600; line-height: 1.25; }',
+      '.dsh-quota-dock-sum-label { font-size: 10.5px; color: var(--qd-label-4); }',
+      '.dsh-quota-dock-sec { margin-bottom: 18px; }',
       '.dsh-quota-dock-sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }',
-      '.dsh-quota-dock-sec-aside { font-size: 11.5px; color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
-      '.dsh-quota-dock-card-flat { border: 1px solid var(--dsw-alias-border-l1, rgb(127 127 127 / 16%)); border-radius: 12px; padding: 2px 12px; }',
-      '.dsh-quota-dock-brow { display: flex; align-items: center; gap: 12px; min-height: 46px; }',
-      '.dsh-quota-dock-brow + .dsh-quota-dock-brow { border-top: 1px solid var(--dsw-alias-border-l1, rgb(127 127 127 / 16%)); }',
-      '.dsh-quota-dock-brow-main { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; }',
+      '.dsh-quota-dock-sec-title { margin: 0 0 7px; font-size: 11.5px; font-weight: 600;',
+      '  color: var(--qd-label-2); letter-spacing: .01em; }',
+      '.dsh-quota-dock-sec-aside { font-size: 10.5px; color: var(--qd-label-4); }',
+      '.dsh-quota-dock-list { display: block; }',
+      '.dsh-quota-dock-plat { display: flex; align-items: center; gap: 8px; min-height: 38px;',
+      '  padding: 0 8px; border-radius: var(--qd-r-sm); transition: background-color 120ms ease-out; }',
+      '.dsh-quota-dock-plat:hover { background: var(--qd-hover); }',
+      '.dsh-quota-dock-dot { flex: none; width: 6px; height: 6px; border-radius: 999px; background: var(--qd-idle); }',
+      '.dsh-quota-dock-dot[data-quota-dot="ok"] { background: var(--qd-success); }',
+      '.dsh-quota-dock-dot[data-quota-dot="bad"] { background: var(--qd-error); }',
+      '.dsh-quota-dock-pname { min-width: 0; overflow: hidden; text-overflow: ellipsis;',
+      '  white-space: nowrap; font-size: 12.5px; font-weight: 600; }',
+      '.dsh-quota-dock-badge { flex: none; padding: 1px 6px; border-radius: var(--qd-r-xs); font-size: 10.5px;',
+      '  background: var(--qd-fill-1); color: var(--qd-label-3); }',
+      '.dsh-quota-dock-pstate { flex: none; font-size: 10.5px; color: var(--qd-label-3); }',
+      '.dsh-quota-dock-pstate[data-quota-state="ok"] { color: var(--qd-success); }',
+      '.dsh-quota-dock-pstate[data-quota-state="bad"] { color: var(--qd-error); }',
+      '.dsh-quota-dock-pmoney { flex: none; margin-left: auto; font-size: 12.5px; font-weight: 600;',
+      '  font-variant-numeric: tabular-nums; }',
+      '.dsh-quota-dock-remove { flex: none; min-height: 26px; padding: 0 7px; cursor: pointer;',
+      '  font: inherit; font-size: 11px; border: 0; border-radius: var(--qd-r-sm); background: transparent;',
+      '  color: var(--qd-label-3); transition: color 150ms ease-out, background-color 150ms ease-out; }',
+      '.dsh-quota-dock-remove:hover { color: var(--qd-error); background: var(--qd-hover); }',
+      '.dsh-quota-dock-form { margin-top: 4px; }',
+      '.dsh-quota-dock-pills { display: flex; gap: 6px; flex-wrap: wrap; }',
+      '.dsh-quota-dock-pill { min-height: 25px; padding: 0 10px; cursor: pointer; font: inherit;',
+      '  font-size: 11.5px; border: 1px solid var(--qd-border-2); border-radius: 999px;',
+      '  background: transparent; color: var(--qd-label-2);',
+      '  transition: color 150ms ease-out, background-color 150ms ease-out, border-color 150ms ease-out; }',
+      '.dsh-quota-dock-pill:hover { background: var(--qd-hover); }',
+      '.dsh-quota-dock-pill[data-active] { border-color: var(--qd-border-3);',
+      '  background: var(--qd-fill-1); color: var(--qd-label-1); font-weight: 500; }',
+      '.dsh-quota-dock-field { display: block; margin-top: 10px; }',
+      '.dsh-quota-dock-field-label { display: block; margin-bottom: 4px; font-size: 10.5px; color: var(--qd-label-3); }',
+      '.dsh-quota-dock-field input { box-sizing: border-box; width: 100%; height: 32px; padding: 0 9px;',
+      '  border: 1px solid var(--qd-border-2); border-radius: var(--qd-r-sm);',
+      '  background: var(--qd-layer-2); color: inherit; font: inherit; font-size: 12.5px; }',
+      '.dsh-quota-dock-submit { display: block; box-sizing: border-box; width: auto; height: 28px; min-height: 28px;',
+      '  padding: 0 14px; margin-top: 14px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 500;',
+      '  border: 0; border-radius: var(--qd-r-sm);',
+      '  background: var(--dsw-alias-button-primary-fill, var(--qd-brand));',
+      '  color: var(--dsw-alias-label-primary-foreground, #fff);',
+      '  transition: opacity 150ms ease-out; }',
+      '.dsh-quota-dock-submit:hover { opacity: .9; }',
+      '.dsh-quota-dock-submit:disabled { opacity: .45; cursor: default; }',
+      '.dsh-quota-dock-about { margin: 0; font-size: 11px; color: var(--qd-label-3); }',
+      '.dsh-quota-dock-pmsg { margin-top: 12px; font-size: 11.5px; color: var(--qd-label-3); }',
+      '.dsh-quota-dock-card-flat { padding: 2px 10px;',
+      '  background: var(--qd-card-fill);',
+      '  border: 1px solid var(--qd-card-stroke); border-radius: var(--qd-r-lg); }',
+      '.dsh-quota-dock-brow { display: flex; align-items: center; gap: 10px; min-height: 40px; }',
+      '.dsh-quota-dock-brow + .dsh-quota-dock-brow { border-top: 1px solid var(--qd-border-1); }',
+      '.dsh-quota-dock-brow-main { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }',
       '.dsh-quota-dock-brow-text { min-width: 0; }',
-      '.dsh-quota-dock-brow-name { font-size: 13px; font-weight: 500; }',
-      '.dsh-quota-dock-brow-sub { margin-top: 2px; font-size: 11.5px; color: var(--dsw-alias-label-tertiary, #8a8a8a); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }',
-      '.dsh-quota-dock-brow-value { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }',
-      '.dsh-quota-dock-brow-age { min-width: 62px; text-align: right; font-size: 11.5px; color: var(--dsw-alias-label-tertiary, #8a8a8a); white-space: nowrap; }',
-      '.dsh-quota-dock-pills { flex-wrap: wrap; }',
-      '.dsh-quota-dock-empty-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px; border: 1px dashed var(--dsw-alias-border-l2, rgb(127 127 127 / 30%)); border-radius: 12px; }',
-      '.dsh-quota-dock-empty-title { font-size: 12.5px; }',
-      '.dsh-quota-dock-empty-sub { margin-top: 3px; font-size: 11.5px; color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
+      '.dsh-quota-dock-brow-name { font-size: 12.5px; font-weight: 500; }',
+      '.dsh-quota-dock-brow-sub { margin-top: 1px; font-size: 10.5px; color: var(--qd-label-4);',
+      '  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }',
+      '.dsh-quota-dock-brow-value { font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }',
+      '.dsh-quota-dock-brow-age { min-width: 54px; text-align: right; font-size: 10.5px; color: var(--qd-label-4); white-space: nowrap; }',
+      '.dsh-quota-dock-mini { flex: none; width: 40px; height: 4px; border-radius: 999px;',
+      '  background: var(--qd-fill-1); overflow: hidden; }',
+      '.dsh-quota-dock-mini i { display: block; height: 100%; border-radius: inherit; background: var(--qd-success); }',
+      '.dsh-quota-dock-empty-row { display: flex; align-items: center; justify-content: space-between; gap: 14px;',
+      '  padding: 12px; border: 1px dashed var(--qd-border-2); border-radius: var(--qd-r-lg); }',
+      '.dsh-quota-dock-empty-title { font-size: 12px; }',
+      '.dsh-quota-dock-empty-sub { margin-top: 3px; font-size: 11px; color: var(--qd-label-3); }',
       '.dsh-quota-dock-fixed { margin-top: 12px; }',
-      '.dsh-quota-dock-hint { margin: 7px 0 0; font-size: 11.5px; line-height: 1.6; color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
-      '.dsh-quota-dock-file { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: var(--dsw-alias-label-tertiary, #8a8a8a); }',
-      '.dsh-quota-dock-form-actions { display: flex; justify-content: flex-end; margin-top: 14px; }',
-      '.dsh-quota-dock-form-actions .dsh-quota-dock-submit { width: auto; padding: 0 18px; }',
-      '.dsh-quota-dock-prefs { border: 1px solid var(--dsw-alias-border-l1, rgb(127 127 127 / 16%)); border-radius: 12px; padding: 2px 12px; }',
-      '.dsh-quota-dock-pref { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 42px; }',
-      '.dsh-quota-dock-pref + .dsh-quota-dock-pref { border-top: 1px solid var(--dsw-alias-border-l1, rgb(127 127 127 / 16%)); }',
-      '.dsh-quota-dock-pref-label { font-size: 12.5px; color: var(--dsw-alias-label-secondary, #5f6368); }',
+      '.dsh-quota-dock-hint { margin: 7px 0 0; font-size: 10.5px; line-height: 1.6; color: var(--qd-label-4); }',
+      '.dsh-quota-dock-file { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px;',
+      '  color: var(--qd-label-4); background: var(--qd-fill-1); padding: 1px 5px; border-radius: var(--qd-r-xs); }',
+      '.dsh-quota-dock-form-actions { display: flex; justify-content: flex-start; gap: 8px; align-items: center; margin-top: 14px; }',
+      '.dsh-quota-dock-form-actions .dsh-quota-dock-submit { width: auto; padding: 0 14px; margin-top: 0; }',
+      '.dsh-quota-dock-prefs { border: 1px solid var(--qd-border-1); border-radius: var(--qd-r-lg);',
+      '  padding: 2px 12px; background: var(--qd-card-fill); }',
+      '.dsh-quota-dock-pref { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 38px; }',
+      '.dsh-quota-dock-pref + .dsh-quota-dock-pref { border-top: 1px solid var(--qd-border-1); }',
+      '.dsh-quota-dock-pref-label { font-size: 11.5px; color: var(--qd-label-2); }',
       '.dsh-quota-dock-pref-control { display: flex; align-items: center; gap: 10px; }',
-      '.dsh-quota-dock-pref-value { font-size: 12.5px; font-variant-numeric: tabular-nums; }',
-      '.dsh-quota-dock-select { height: 30px; padding: 0 8px; font: inherit; font-size: 12.5px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2, rgb(127 127 127 / 30%)); background: var(--dsw-alias-bg-l0, #fff); color: var(--dsw-alias-label-primary, #17181a); cursor: pointer; }',
-      '.dsh-quota-dock-ghost-sm { min-height: 28px; padding: 0 10px; font-size: 12px; }',
+      '.dsh-quota-dock-pref-value { font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--qd-label-3); }',
+      '.dsh-quota-dock-select { height: 26px; padding: 0 8px; font: inherit; font-size: 11.5px;',
+      '  border-radius: var(--qd-r-sm); border: 1px solid var(--qd-border-2);',
+      '  background: var(--qd-layer-2); color: var(--qd-label-1); cursor: pointer; }',
+      '.dsh-quota-dock-ghost-sm { min-height: 24px; height: 24px; padding: 0 8px; font-size: 11px; }',
       '.dsh-quota-dock-pill:focus-visible, .dsh-quota-dock-remove:focus-visible,',
       '.dsh-quota-dock-ghost:focus-visible, .dsh-quota-dock-sheet-close:focus-visible,',
       '.dsh-quota-dock-submit:focus-visible, .dsh-quota-dock-field input:focus-visible {',
-      '  outline: 2px solid var(--dsw-alias-brand-primary, #5B9BF3); outline-offset: 2px;',
+      '  outline: 2px solid var(--qd-focus); outline-offset: 1px;',
       '}',
       '@media (prefers-reduced-motion: reduce) {',
       '  .dsh-quota-dock-sheet { animation: none; }',
       '  .dsh-quota-dock-bar-fill, .dsh-quota-dock-plat, .dsh-quota-dock-pill,',
       '  .dsh-quota-dock-ghost, .dsh-quota-dock-remove, .dsh-quota-dock-submit,',
-      '  .dsh-quota-dock-sheet-close { transition: none; }',
+      '  .dsh-quota-dock-sheet-close, .dsh-quota-dock-row { transition: none; }',
       '}',
     ].join('\n')
     const STYLE = h('style', { key: 'quota-dock-style' }, CSS)
+
+    /**
+     * The cadence the Host publishes; the row never invents one of its own.
+     * @param snapshot - the Host snapshot, or null before the first read.
+     * @returns the refresh interval in milliseconds.
+     */
+    function refreshCadence(snapshot) {
+      const ms = snapshot === null || snapshot === undefined ? null : snapshot.refreshMs
+      return typeof ms === 'number' && Number.isFinite(ms) && ms > 0 ? ms : FALLBACK_REFRESH_MS
+    }
+
+    /**
+     * How long to wait before reading the snapshot again. The read is the
+     * trigger, so the wait is the whole loop: land just past the cache TTL, come
+     * back quickly while the Host reports a cycle in flight (so its numbers show
+     * up the moment it settles), and back off when the last cycle failed.
+     * @param snapshot - the snapshot the previous read returned, or null.
+     * @returns the delay in milliseconds.
+     */
+    function nextReadDelay(snapshot) {
+      if (snapshot !== null && snapshot !== undefined && snapshot.fetching === true) return FAST_FOLLOW_MS
+      const cadence = refreshCadence(snapshot)
+      const age = snapshot !== null && snapshot !== undefined
+        && typeof snapshot.ageMs === 'number' && Number.isFinite(snapshot.ageMs)
+        ? Math.max(0, snapshot.ageMs)
+        : null
+      // No age at all: the Host has never succeeded, so retry calmly.
+      if (age === null) return Math.min(cadence, OVERDUE_RETRY_MS)
+      const left = cadence - age
+      // Past the TTL with nothing in flight means the last cycle failed.
+      if (left <= 0) return Math.min(cadence, OVERDUE_RETRY_MS)
+      return Math.max(MIN_READ_MS, left + READ_LEAD_MS)
+    }
 
     /** GET the snapshot; null on any transport or parse failure. */
     async function readSnapshot() {
@@ -1467,6 +1583,13 @@ window.__ModuleLoader__.load({
     let refreshInFlight = null
 
     /**
+     * Set by the row's effect: re-arm the read timer from the current snapshot.
+     * A manual or session-switch refresh lands here so it never waits out the
+     * cadence, and a running cycle is then followed at the fast cadence.
+     */
+    let nudge = null
+
+    /**
      * Ask the Host for a fresh read, then adopt whatever it reports. Single
      * flight on this side, with the Host's own dedupe behind it, so a session
      * switch landing on top of a button press still sends one request.
@@ -1485,6 +1608,7 @@ window.__ModuleLoader__.load({
           publish({ busy: false })
           if (next !== null && next !== undefined) publish({ snapshot: next, phase: 'ready' })
           else if (store.snapshot === null) publish({ phase: 'failed' })
+          if (typeof nudge === 'function') nudge()
           return next
         })
       return refreshInFlight
@@ -1512,9 +1636,9 @@ window.__ModuleLoader__.load({
         const pull = () => {
           if (typeof loader.current !== 'function') {
             publish({ phase: 'failed' })
-            return
+            return Promise.resolve()
           }
-          Promise.resolve()
+          return Promise.resolve()
             .then(() => loader.current(adopt))
             .then(
               next => {
@@ -1527,15 +1651,50 @@ window.__ModuleLoader__.load({
               },
             )
         }
-        pull()
-        if (typeof window === 'undefined') return undefined
-        // No background poll: the numbers refresh on a session switch, on the
-        // refresh buttons, and on that first mount. The ticker only re-renders,
-        // so the 峰/谷 countdown stays honest without touching the network.
+        if (typeof window === 'undefined') {
+          pull()
+          return undefined
+        }
+        // The ticker only repaints, so the 峰/谷 countdown stays honest; it never
+        // touches the network.
         const ticker = window.setInterval(() => { publish({ now: Date.now() }) }, TICK_MS)
+
+        // The read loop is the refresh timer. The Host refreshes lazily on a read,
+        // so re-reading on the cadence it publishes is what keeps the numbers —
+        // and the warning that rides on them — honest. While a cycle is in flight
+        // the loop follows at the fast cadence, so a finished cycle shows up the
+        // moment it settles instead of one whole cadence later.
+        let timer = null
+        let reading = false
+        function schedule(snapshot) {
+          if (!live) return
+          if (timer !== null) {
+            clearTimer(timer)
+            timer = null
+          }
+          timer = setTimer(read, nextReadDelay(snapshot))
+        }
+        async function read() {
+          if (!live || reading) return
+          reading = true
+          let next = null
+          try {
+            next = await readSnapshot()
+          } finally {
+            reading = false
+          }
+          if (!live) return
+          if (next !== null && next !== undefined) publish({ snapshot: next, phase: 'ready' })
+          schedule(next)
+        }
+        // A manual refresh or a session switch re-arms the loop immediately.
+        nudge = () => { if (live) schedule(store.snapshot) }
+        Promise.resolve(pull()).then(() => { if (live) schedule(store.snapshot) })
         return () => {
           live = false
+          nudge = null
           window.clearInterval(ticker)
+          clearTimer(timer)
         }
       }, [])
 
@@ -1576,9 +1735,15 @@ window.__ModuleLoader__.load({
       const error = snapshot !== null && snapshot !== undefined && typeof snapshot.error === 'string'
         ? snapshot.error
         : null
+      // A read at the TTL boundary is what starts the next cycle, so `stale` rides
+      // along with `fetching` on the way to fresh numbers. That is not a data
+      // problem: only the settled state may raise the marker. Failures (an error
+      // string, a provider reporting not-ok) still show through immediately.
+      const inflight = snapshot !== null && snapshot !== undefined && snapshot.fetching === true
       const warn = !pending && (failed || (snapshot !== null && snapshot !== undefined
-        && (snapshot.stale === true || error !== null
-          || snapshot.cc?.ok === false || snapshot.deepseek?.ok === false)))
+        && (error !== null
+          || snapshot.cc?.ok === false || snapshot.deepseek?.ok === false
+          || (snapshot.stale === true && !inflight))))
       // The tooltip carries the age, and the upstream error when there is one:
       // the row itself never nags about staleness.
       const age = ageText(snapshot, t)
@@ -1821,6 +1986,7 @@ window.__ModuleLoader__.load({
       daysLeft,
       daysText,
       refreshNow,
+      nextReadDelay,
       ageText,
       sessionKeyOf,
       platformMoney,

@@ -32,14 +32,20 @@ let captured = null
 const focusListeners = []
 const keyListeners = []
 const intervals = []
+const timeouts = []
+// The most recent scheduled read, so a test can fire one turn of the loop by hand.
+let lastTimer = null
 globalThis.window = {
   __ModuleLoader__: {
     load(config) { captured = config },
   },
   // Timers are recorded, never scheduled: no DOM is needed, and the harness can
-  // prove that nothing polls upstream on a 5-minute cadence any more.
+  // prove the row's read loop lands on the Host's cadence instead of the retired
+  // 5-minute poll.
   setInterval: (fn, ms) => { intervals.push(ms); return 0 },
   clearInterval: () => {},
+  setTimeout: (fn, ms) => { timeouts.push(ms); lastTimer = { fn, ms }; return timeouts.length },
+  clearTimeout: () => {},
   addEventListener: (type, fn) => { (type === 'keydown' ? keyListeners : focusListeners).push(fn) },
   removeEventListener: () => {},
 }
@@ -557,11 +563,61 @@ async function main() {
   assert.ok(emptyText.includes('还能用') && emptyText.includes('— 天'),
     `an empty snapshot must still state the runway: ${emptyText}`)
 
-  // 7f: the old 5-minute background poll is gone — the only timer left is the
-  // clock ticker that keeps the 峰/谷 countdown honest.
+  // 7f: the clock ticker is the only interval, and the read loop runs on its own
+  // timer — a read is what makes the Host refresh, so it must exist, sit on the
+  // Host's cadence, and never fall back to the retired 5-minute poll.
   assert.ok(intervals.length >= 1, 'the row must still tick so the countdown stays honest')
   assert.ok(intervals.every(ms => ms === 30000),
-    `no timer may poll upstream again: ${JSON.stringify(intervals)}`)
+    `the clock ticker must stay the only interval: ${JSON.stringify(intervals)}`)
+  assert.ok(timeouts.length >= 1, 'the row must re-read the snapshot on a timer')
+  assert.ok(!timeouts.includes(300000), `the old 5-minute poll must stay gone: ${JSON.stringify(timeouts)}`)
+
+  // 7g: the read timer lands just past the Host's TTL, follows a running cycle
+  // quickly, and backs off when the last cycle failed.
+  assert.equal(mod.nextReadDelay({ refreshMs: 30000, ageMs: 0, fetching: false }), 30500,
+    'a fresh cache waits out the cadence plus the lead')
+  assert.equal(mod.nextReadDelay({ refreshMs: 30000, ageMs: 29000, fetching: false }), 2000,
+    'a cache about to expire must not spin faster than the floor')
+  assert.equal(mod.nextReadDelay({ refreshMs: 30000, ageMs: 12000, fetching: false }), 18500,
+    'the wait is measured from the reported age, not from the last read')
+  assert.equal(mod.nextReadDelay({ refreshMs: 30000, ageMs: 45000, fetching: false }), 15000,
+    'a failed cycle backs off to the overdue retry')
+  assert.equal(mod.nextReadDelay({ refreshMs: 30000, ageMs: 0, fetching: true }), 1500,
+    'a running cycle is followed at the fast cadence')
+  assert.equal(mod.nextReadDelay(null), 15000, 'a Host that never succeeded retries calmly')
+  assert.equal(mod.nextReadDelay({ ageMs: 0 }), 60500, 'a missing refreshMs falls back to 60s')
+
+  // 7g2: a cycle that is merely in flight over the TTL must not flash the marker;
+  // a settled stale snapshot still must.
+  const dueTree = await mount({
+    ...fixture, fetchedAt: Date.now(), ageMs: 61000, refreshMs: 30000, stale: true, fetching: true, error: null,
+  })
+  assert.equal(find(dueTree, 'dsh-quota-dock-warn'), null, 'a cycle in flight must not raise the marker')
+  const settledTree = await mount({
+    ...fixture, fetchedAt: Date.now(), ageMs: 61000, refreshMs: 30000, stale: true, fetching: false, error: null,
+  })
+  assert.ok(find(settledTree, 'dsh-quota-dock-warn') !== null, 'a settled stale snapshot must raise the marker')
+
+  // 7h: the loop is wired — one turn reads the Host, adopts its answer, and picks
+  // the fast cadence while a cycle is in flight.
+  const inFlight = {
+    ...fixture, fetchedAt: Date.now(), ageMs: 61000, refreshMs: 30000, fetching: true, stale: false,
+  }
+  const realFetch = globalThis.fetch
+  globalThis.fetch = async () => ({ ok: true, status: 200, text: async () => JSON.stringify(inFlight) })
+  timeouts.length = 0
+  lastTimer = null
+  settleStore()
+  resetInstance()
+  render({ load: async () => fixture, t: zh })
+  await tick()
+  assert.equal(timeouts.length, 1, `mounting must schedule exactly one read: ${JSON.stringify(timeouts)}`)
+  assert.ok(lastTimer !== null, 'the scheduled read must be captured')
+  await lastTimer.fn()
+  assert.equal(mod.store.snapshot.fetching, true, 'one turn of the loop must adopt the Host answer')
+  assert.equal(timeouts[timeouts.length - 1], 1500,
+    `a running cycle must be followed at the fast cadence: ${JSON.stringify(timeouts)}`)
+  globalThis.fetch = realFetch
 
   /* ---- 8. the settings page on settings.section ------------------------- */
   let platformCalls = 0
@@ -688,6 +744,7 @@ async function main() {
     localeKeys: Object.keys(locales[0].dictionary.zh),
     effects: effects.length,
     timers: intervals,
+    readTimers: timeouts,
     strip,
     brokenStrip,
     partialStrip,
@@ -730,7 +787,7 @@ async function main() {
       failed: stripText(failedTree),
       stale: stripText(staleRendered),
     },
-    visual: 'The row is unchanged (centred wrapping cells of label + 48x7px bar + percentage, then the hairline divider and the DS cycle track); it reads on mount and on a session switch, refreshes from the buttons, and no longer polls on any timer. Clicking it centres an 820px-max, 78vh-max money panel over the frame with no page-wide backdrop, so the rest of the frame keeps its hover and clicks: a header (额度与余额 + 更新于 + 刷新 + ×), then a hero row that sets 本月剩余 above a 30px number with 本月已用 and 还能用 beside it, a full-bleed hairline, then two-column cards with Command Code spanning both columns (three five-column window rows: label, used/cap, 5px bar, percentage, reset; plus one detail line under the month row — 已用 · 剩余 · 周期结束 · 订阅 — so 月 is named once), DeepSeek (its currency as the card note over 总额/赠送/充值, then 可用 as a dot plus its word, then the 峰/谷 line as a ruled footnote) and 其他平台 (one explanatory line when nothing is connected), and a tinted footer with the cadence on the left and 设置 → 额度与平台 on the right. The settings page is a four-section configuration page (内置平台: one row per built-in naming the env var it reads and its headline figure; 已接入平台: a row of status dot + name + kind·address + spelled-out state + amount + delete, with a dashed empty state that links to the form; 接入新平台: six preset pills that fill name and address, the OpenRouter address shown read-only, labelled name/address/key fields with a right-aligned 添加; 数据与刷新: a cadence select beside 立即刷新, the last refresh and the store path), with no money of its own. Semantic colour is only the three literals #7BB295 / #E0A03A / #E0574F; every other colour is an --dsw-alias-* token with a literal fallback.',
+    visual: 'The row is unchanged (centred wrapping cells of label + 44x5px bar + percentage, then the hairline divider and the DS cycle track); it reads on mount, re-reads on the cadence the Host publishes (which is also what makes the Host refresh) and follows a running cycle at the fast cadence, with the buttons and a session switch re-arming the loop immediately. Clicking it centres an 820px-max, 78vh-max money panel over the frame with no page-wide backdrop, so the rest of the frame keeps its hover and clicks: a header (额度与余额 + 更新于 + 刷新 + ×), then a hero row that sets 本月剩余 above a 26px number with 本月已用 and 还能用 beside it, a full-bleed hairline, then two-column cards with Command Code spanning both columns (three five-column window rows: label, used/cap, 5px bar, percentage, reset; plus one detail line under the month row — 已用 · 剩余 · 周期结束 · 订阅 — so 月 is named once), DeepSeek (its currency as the card note over 总额/赠送/充值, then 可用 as a dot plus its word, then the 峰/谷 line as a ruled footnote) and 其他平台 (one explanatory line when nothing is connected), and a tinted footer with the cadence on the left and 设置 → 额度与平台 on the right. The settings page is a four-section configuration page (内置平台: one row per built-in naming the env var it reads and its headline figure; 已接入平台: a row of status dot + name + kind·address + spelled-out state + amount + delete, with a dashed empty state that links to the form; 接入新平台: six preset pills that fill name and address, the OpenRouter address shown read-only, labelled name/address/key fields with a right-aligned 添加; 数据与刷新: a cadence select beside 立即刷新, the last refresh and the store path), with no money of its own. Colour goes through a --qd-* alias layer: surfaces, text, borders, radius and elevation map the host --dsw-alias-* tokens so the panel follows the skin, while the three state colours are a plugin-owned muted trio (#4f8d6c / #b9812f / #c05a52) because the host palette is green-500 #22c55e, which reads as a warning light at this type scale. The sheet header carries one chip per upstream (CC/DS) plus the read age, the hero sets 本月剩余 above three stats (本月已用, 还能用, 月度已用 when the cap is known), and each card ends with a ruled footnote; the settings page opens with a four-cell summary (接入 / 正常 / 失败 / 间隔) before the four sections, and the built-in Command Code row carries a mini month bar beside its share.',
   }, null, 2))
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "dsh-quota-dock",
-  "version": "0.3.1",
+  "version": "0.5.1",
   "description": "Composer-dock quota strip: Command Code 5h/weekly/monthly windows with fill bars and percentages, plus DeepSeek's peak/off-peak period.",
   "repository": {
     "type": "git",
