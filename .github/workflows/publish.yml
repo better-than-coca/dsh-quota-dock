@@ -4,6 +4,9 @@ name: Publish Package
 # Requires a "Trusted Publisher" entry on npmjs.com for this repository:
 #   owner better-than-coca / repository dsh-quota-dock / workflow publish.yml
 # and that entry must have direct publishing ("npm publish") enabled.
+#
+# Releases are the default: pushing a tag ships the package *and* creates the
+# GitHub release, so there is no second manual step after a version bump.
 
 on:
   push:
@@ -12,8 +15,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  id-token: write   # required for OIDC
-  contents: read
+  id-token: write    # required for OIDC
+  contents: write    # required to create the GitHub release
 
 jobs:
   publish:
@@ -45,3 +48,22 @@ jobs:
       - run: npm test
 
       - run: npm publish
+
+      # The release goes out after the package lands, so a failed publish never
+      # leaves a release pointing at a version nobody can install. Note bodies
+      # come from the commit log; edit the release afterwards if it needs prose.
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          extra="--latest"
+          case "$version" in
+            *-*) extra="--prerelease" ;;
+          esac
+          gh release create "$GITHUB_REF_NAME" \
+            --title "dsh-quota-dock $version" \
+            --generate-notes \
+            "$extra" \
+            --verify-tag
